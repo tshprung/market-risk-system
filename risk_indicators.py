@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from scipy.stats import percentileofscore
+from typing import List
 
 # ======================
 # DATA HELPERS
@@ -35,12 +36,77 @@ def normalize_z(z, cap=3.0):
 # INDICATORS
 # ======================
 
-def volatility_expansion_score():
-    vix = get_close_series("^VIX", "6mo")
-    if len(vix) < 10:
+def volatility_compression_score(window: int = 60):
+    """
+    Detects when VIX is unusually low (fragile market).
+    High score = fragile, pre-crash conditions.
+    """
+    vix = get_close_series("^VIX", "1y")
+    if len(vix) < window:
         return 0.0
-    roc = vix.pct_change(3).dropna()
-    z = zscore(roc, 60)
+
+    z = zscore(vix, window)
+    return normalize_z(-z)  # inverted: low VIX → high fragility
+
+def credit_complacency_score(window: int = 120):
+    """
+    Detects when credit spreads are unusually tight.
+    High score = fragile, late-cycle market.
+    """
+    hyg = get_close_series("HYG", "1y")
+    ief = get_close_series("IEF", "1y")
+    if hyg.empty or ief.empty:
+        return 0.0
+
+    rel = hyg.pct_change() - ief.pct_change()
+    rolling_std = rel.rolling(window).std().dropna()
+    if rolling_std.empty:
+        return 0.0
+
+    latest_std = rolling_std.iloc[-1]
+    mean_std = rolling_std.mean()
+    std_std = rolling_std.std()
+    if std_std == 0 or np.isnan(std_std):
+        return 0.0
+
+    z = (mean_std - latest_std) / std_std  # inverted: low std = high fragility
+    return normalize_z(z)
+
+def breadth_divergence_score(window: int = 60):
+    """
+    Detects small-cap underperformance vs large-cap (fragile rally).
+    High score = small caps lag → caution.
+    """
+    small = get_close_series("IWM", "6mo")
+    large = get_close_series("SPY", "6mo")
+    if len(small) < window or len(large) < window:
+        return 0.0
+
+    rel = small.pct_change() - large.pct_change()
+    z = zscore(rel.dropna(), window)
+    return normalize_z(-z)  # negative z = small caps lag → fragile
+
+def risk_acceleration_score(composite_scores: List[float], window: int = 3):
+    """
+    Measures acceleration of risk score.
+    Input: previous composite scores (0–1)
+    Output: normalized 0–1 acceleration score
+    """
+    if len(composite_scores) < window + 1:
+        return 0.0
+
+    recent = np.array(composite_scores[-window-1:])
+    accel = recent[2:] - 2 * recent[1:-1] + recent[:-2]
+    if len(accel) == 0:
+        return 0.0
+
+    latest_accel = accel[-1]
+    mean_accel = accel.mean()
+    std_accel = accel.std()
+    if std_accel == 0 or np.isnan(std_accel):
+        return 0.0
+
+    z = (latest_accel - mean_accel) / std_accel
     return normalize_z(z)
 
 def options_hedging_score():
