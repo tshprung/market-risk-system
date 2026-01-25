@@ -1,3 +1,4 @@
+import os
 import json
 import smtplib
 from datetime import datetime
@@ -13,7 +14,8 @@ STATE_FILE = "intraday_state.json"
 
 EMAIL_FROM = "tshprung@gmail.com"
 EMAIL_TO = "tshprung@gmail.com"
-EMAIL_PASSWORD = "efhk szhz humo zpmj"
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
