@@ -31,6 +31,15 @@ score = (
     0.3 * options_hedging_score()
 )
 
+sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
+btc_prices = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
+
+btc_corr_score = btc_equity_correlation(sp500_prices, btc_prices)
+score += 0.15 * btc_corr_score  # weight of correlation in total intraday score
+
+if btc_corr_score > 0.6:
+    alerts.append(f"BTC vs SPX negative correlation detected: {btc_corr_score:.2f}")
+
 # -----------------------------
 # Cross-asset confirmation
 # -----------------------------
