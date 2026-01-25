@@ -35,6 +35,13 @@ def normalize_z(z, cap=3.0):
 # ======================
 # INDICATORS
 # ======================
+def volatility_expansion_score():
+    vix = get_close_series("^VIX", "6mo")
+    if len(vix) < 10:
+        return 0.0
+    roc = vix.pct_change(3).dropna()
+    z = zscore(roc, 60)
+    return normalize_z(z)
 
 def volatility_compression_score(window: int = 60):
     """
