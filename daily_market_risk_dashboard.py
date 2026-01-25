@@ -10,7 +10,8 @@ from risk_indicators import (
     volatility_expansion_score,
     options_hedging_score,
     credit_stress_score,
-    small_cap_score
+    small_cap_score,
+    cross_asset_confirmation_score
 )
 
 EMAIL_FROM = "tshprung@gmail.com"
@@ -29,7 +30,8 @@ scores = {
     "Volatility expansion (early)": volatility_expansion_score(),
     "Options hedging stress": options_hedging_score(),
     "Credit stress": credit_stress_score(),
-    "Small-cap underperformance": small_cap_score()
+    "Small-cap underperformance": small_cap_score(),
+    "Cross-asset confirmation": cross_asset_confirmation_score()
 }
 
 risk_levels = list(scores.values())
