@@ -10,7 +10,8 @@ from risk_indicators import (
     credit_stress_score,
     options_hedging_score,
     gold_crypto_confirmation,
-    risk_acceleration_score
+    risk_acceleration_score,
+    btc_equity_correlation
 )
 
 STATE_FILE = "intraday_state.json"
