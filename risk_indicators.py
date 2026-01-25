@@ -85,3 +85,9 @@ def small_cap_score():
     rel = iwm.pct_change(20) - spy.pct_change(20)
     z = zscore(rel.dropna(), 120)
     return normalize_z(z)
+
+def confirmation_signal(price_series, window=20):
+    returns = price_series.pct_change().dropna()
+    z = (returns.iloc[-1] - returns.rolling(window).mean().iloc[-1]) / \
+        returns.rolling(window).std().iloc[-1]
+    return z
