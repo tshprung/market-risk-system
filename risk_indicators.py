@@ -203,9 +203,9 @@ def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
 
     gold_z_series = rolling_zscore(gold_ret, 20)
     btc_z_series  = rolling_zscore(btc_ret, 20)
-
-    gold_z = float(gold_z_series.dropna().iloc[-1]) if len(gold_z_series.dropna()) > 0 else 0.0
-    btc_z  = float(btc_z_series.dropna().iloc[-1])  if len(btc_z_series.dropna()) > 0 else 0.0
+    
+    gold_z = float(gold_z_series.dropna().iloc[-1].item()) if len(gold_z_series.dropna()) > 0 else 0.0
+    btc_z  = float(btc_z_series.dropna().iloc[-1].item())  if len(btc_z_series.dropna()) > 0 else 0.0
 
     score = 0.0
 
