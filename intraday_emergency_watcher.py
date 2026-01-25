@@ -6,7 +6,7 @@ from datetime import datetime
 from email.message import EmailMessage
 
 from risk_indicators import (
-    volatility_compression_score,
+    volatility_expansion_score,
     credit_stress_score,
     options_hedging_score,
     gold_crypto_confirmation,
@@ -26,7 +26,7 @@ SMTP_PORT = 587
 # Compute base scores
 # -----------------------------
 score = (
-    0.4 * volatility_compression_score() +
+    0.4 * volatility_expansion_score() +
     0.3 * credit_stress_score() +
     0.3 * options_hedging_score()
 )
