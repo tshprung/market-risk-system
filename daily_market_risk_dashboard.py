@@ -135,12 +135,15 @@ msg["From"], msg["To"] = EMAIL_FROM, EMAIL_TO
 msg["Subject"] = f"Market Risk {emoji} | Cash {cash}% | {change} | Trade Signal: {trade_signal}"
 
 html = f"""
-<p><b>Guidance:</b> {guidance}</p>
+<p><b>Overall guidance:</b> {guidance}</p>
+<p><b>Suggested cash allocation:</b> {cash}%</p>
 <p><b>Forced selling probability:</b> {forced_pct}%</p>
-<p><b>{change}</b></p>
+<p><b>Status change:</b> {change}</p>
+<p><b>Trade signal:</b> {trade_signal}</p>
+<hr>
 <img src="cid:dash">
 """
-html += f"<p><b>Trade signal:</b> {trade_signal}</p>"
+
 
 msg.attach(MIMEText(html, "html"))
 with open(OUTPUT_FILE, "rb") as f:
