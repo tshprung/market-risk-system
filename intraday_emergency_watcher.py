@@ -8,7 +8,7 @@ from risk_indicators import (
     volatility_expansion_score,
     credit_stress_score,
     options_hedging_score,
-    gold_crypto_confirmation
+    cross_asset_confirmation_score
 )
 
 STATE_FILE = "intraday_state.json"
@@ -26,20 +26,16 @@ score = (
     0.3 * options_hedging_score()
 )
 
-gold_prices = yf.download("GLD", period="3mo", progress=False)["Close"]
-btc_prices = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
-
-confirm_score, gold_z, btc_z = gold_crypto_confirmation(
-    gold_prices,
-    btc_prices
-)
-
-score += int(confirm_score * 20)  # maps ±1 → ±20 points
+confirm = cross_asset_confirmation_score()
+score += 0.15 * confirm
 
 if confirm_score > 0:
     alerts.append(
         f"Cross-asset confirmation: Gold Z={gold_z:.2f}, BTC Z={btc_z:.2f}"
     )
+    
+if confirm > 0.6:
+    alerts.append("Cross-asset risk-off confirmation (Gold/BTC)")
 
 score = int(score * 100)
 
