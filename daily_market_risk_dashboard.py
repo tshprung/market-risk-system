@@ -35,8 +35,8 @@ scores = {
 risk_levels = list(scores.values())
 indicators = list(scores.keys())
 
-red_count = sum(r >= RED for r in risk_levels)
-yellow_count = sum(GREEN <= r < RED for r in risk_levels)
+red_count = int(sum(float(r) >= RED for r in risk_levels))
+yellow_count = int(sum(GREEN <= float(r) < RED for r in risk_levels))
 
 forced_selling = min(
     0.35 * scores["Credit stress"] +
