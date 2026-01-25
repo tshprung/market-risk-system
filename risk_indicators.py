@@ -81,32 +81,31 @@ def rolling_zscore(series: pd.Series, window: int = 20):
     std = series.rolling(window).std()
     return (series - mean) / std
 
-def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
-    """
-    Returns:
-    - confirmation_score (float)
-    - gold_z (float)
-    - btc_z (float)
-    """
+def cross_asset_confirmation_score():
+    gold = get_close_series("GLD", "6mo")
+    btc = get_close_series("BTC-USD", "6mo")
 
-    gold_ret = gold_prices.pct_change()
-    btc_ret = btc_prices.pct_change()
+    if len(gold) < 40 or len(btc) < 40:
+        return 0.0
 
-    gold_z = rolling_zscore(gold_ret, 20).iloc[-1]
-    btc_z = rolling_zscore(btc_ret, 20).iloc[-1]
+    gold_ret = gold.pct_change().dropna()
+    btc_ret = btc.pct_change().dropna()
+
+    gold_z = zscore(gold_ret, 20)
+    btc_z = zscore(btc_ret, 20)
 
     score = 0.0
 
     # Risk-off confirmation
-    if gold_z > 1.0:
-        score += 0.5
-    if btc_z < -1.0:
-        score += 0.5
+    if gold_z > 0:
+        score += normalize_z(gold_z)
+    if btc_z < 0:
+        score += normalize_z(-btc_z)
 
-    # Risk-on contradiction
-    if gold_z < -1.0:
-        score -= 0.5
-    if btc_z > 1.0:
-        score -= 0.5
+    # Risk-on contradiction (reduces confidence)
+    if gold_z < 0:
+        score -= normalize_z(-gold_z) * 0.5
+    if btc_z > 0:
+        score -= normalize_z(btc_z) * 0.5
 
-    return score, float(gold_z), float(btc_z)
+    return min(max(score / 2.0, 0.0), 1.0)
