@@ -11,7 +11,10 @@ from risk_indicators import (
     options_hedging_score,
     credit_stress_score,
     small_cap_score,
-    cross_asset_confirmation_score
+    gold_crypto_confirmation,
+    volatility_compression_score,
+    credit_complacency_score,
+    breadth_divergence_score
 )
 
 EMAIL_FROM = "tshprung@gmail.com"
@@ -27,11 +30,14 @@ OUTPUT_FILE = "risk_dashboard.png"
 GREEN, RED = 0.33, 0.66
 
 scores = {
-    "Volatility expansion (early)": volatility_expansion_score(),
+    "Volatility expansion": volatility_expansion_score(),
     "Options hedging stress": options_hedging_score(),
     "Credit stress": credit_stress_score(),
     "Small-cap underperformance": small_cap_score(),
-    "Cross-asset confirmation": cross_asset_confirmation_score()
+    "Cross-asset confirmation": gold_crypto_confirmation(get_close_series("GLD"), get_close_series("BTC-USD"))[0],  # only score
+    "Volatility compression": volatility_compression_score(),
+    "Credit complacency": credit_complacency_score(),
+    "Breadth divergence": breadth_divergence_score()
 }
 
 risk_levels = list(scores.values())
