@@ -9,17 +9,33 @@ from risk_indicators import (
 import yfinance as yf
 import json
 import os
+from datetime import datetime, timedelta
 
 STATE_FILE = "trade_signal_state.json"
 
+SELL_COOLDOWN_DAYS = 5
+BUY_COOLDOWN_DAYS = 3
 # --- Load recent intraday scores for acceleration ---
 try:
     with open(STATE_FILE) as f:
-        prev = json.load(f)
+        state = json.load(f)
 except:
-    prev = {"recent_scores": []}
+    state = {
+        "signal": "HOLD",
+        "last_action": None,
+        "last_action_time": None
+    }
 
 recent_scores = prev.get("recent_scores", [])
+
+def in_cooldown(state, action, days):
+    if state["last_action"] != action:
+        return False
+    if not state["last_action_time"]:
+        return False
+
+    last = datetime.fromisoformat(state["last_action_time"])
+    return datetime.utcnow() < last + timedelta(days=days)
 
 # --- Fetch prices ---
 sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
@@ -54,12 +70,27 @@ composite_pct = int(composite*100)
 
 # --- Sell / Rebuy Logic ---
 signal = "HOLD"
-if composite_pct >= 80:
-    signal = "SELL — high risk"
-elif composite_pct <= 50 and prev.get("composite_pct", 100) >= 80:
-    signal = "REBUY — risk easing"
+
+if sell_condition:
+    if not in_cooldown(state, "SELL", BUY_COOLDOWN_DAYS):
+        signal = "SELL"
+        state["last_action"] = "SELL"
+        state["last_action_time"] = datetime.utcnow().isoformat()
+    else:
+        signal = "HOLD (sell cooldown)"
+elif rebuy_condition:
+    if not in_cooldown(state, "REBUY", SELL_COOLDOWN_DAYS):
+        signal = "REBUY"
+        state["last_action"] = "REBUY"
+        state["last_action_time"] = datetime.utcnow().isoformat()
+    else:
+        signal = "HOLD (rebuy cooldown)"
 
 # --- Save state ---
+state["signal"] = signal
+with open(STATE_FILE, "w") as f:
+    json.dump(state, f)
+    
 with open(STATE_FILE, "w") as f:
     json.dump({
         "recent_scores": recent_scores,
