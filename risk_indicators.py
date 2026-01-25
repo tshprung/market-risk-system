@@ -76,18 +76,37 @@ def credit_stress_score():
     z = zscore(rel.dropna(), 120)
     return normalize_z(z)
 
-def small_cap_score():
-    iwm = get_close_series("IWM", "1y")
-    spy = get_close_series("SPY", "1y")
-    if iwm.empty or spy.empty:
-        return 0.0
+def rolling_zscore(series: pd.Series, window: int = 20):
+    mean = series.rolling(window).mean()
+    std = series.rolling(window).std()
+    return (series - mean) / std
 
-    rel = iwm.pct_change(20) - spy.pct_change(20)
-    z = zscore(rel.dropna(), 120)
-    return normalize_z(z)
+def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
+    """
+    Returns:
+    - confirmation_score (float)
+    - gold_z (float)
+    - btc_z (float)
+    """
 
-def confirmation_signal(price_series, window=20):
-    returns = price_series.pct_change().dropna()
-    z = (returns.iloc[-1] - returns.rolling(window).mean().iloc[-1]) / \
-        returns.rolling(window).std().iloc[-1]
-    return z
+    gold_ret = gold_prices.pct_change()
+    btc_ret = btc_prices.pct_change()
+
+    gold_z = rolling_zscore(gold_ret, 20).iloc[-1]
+    btc_z = rolling_zscore(btc_ret, 20).iloc[-1]
+
+    score = 0.0
+
+    # Risk-off confirmation
+    if gold_z > 1.0:
+        score += 0.5
+    if btc_z < -1.0:
+        score += 0.5
+
+    # Risk-on contradiction
+    if gold_z < -1.0:
+        score -= 0.5
+    if btc_z > 1.0:
+        score -= 0.5
+
+    return score, float(gold_z), float(btc_z)
