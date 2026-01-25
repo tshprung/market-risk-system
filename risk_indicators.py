@@ -201,8 +201,11 @@ def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
     if gold_ret.empty or btc_ret.empty:
         return 0.0, 0.0, 0.0
 
-    gold_z = rolling_zscore(gold_ret, 20).iloc[-1]
-    btc_z = rolling_zscore(btc_ret, 20).iloc[-1]
+    gold_z_series = rolling_zscore(gold_ret, 20)
+    btc_z_series  = rolling_zscore(btc_ret, 20)
+
+    gold_z = float(gold_z_series.dropna().iloc[-1]) if not gold_z_series.dropna().empty else 0.0
+    btc_z  = float(btc_z_series.dropna().iloc[-1])  if not btc_z_series.dropna().empty else 0.0
 
     score = 0.0
 
@@ -217,6 +220,11 @@ def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
         score -= 0.5
     if btc_z > 1.0:
         score -= 0.5
+
+    # Clamp score to -1 .. 1
+    score = max(min(score, 1.0), -1.0)
+
+    return score, gold_z, btc_z
   
 def btc_equity_correlation(sp500_prices: pd.Series, btc_prices: pd.Series, window=20):
     """
