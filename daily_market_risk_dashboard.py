@@ -51,8 +51,9 @@ for k in scores:
     if scores[k] is None or not isinstance(scores[k], (int, float)):
         scores[k] = 0.0
 
-risk_levels = list(scores.values())
-indicators = list(scores.keys())
+sorted_items = sorted(scores.items(), key=lambda x: x[1])
+indicators = [k for k, _ in sorted_items]
+risk_levels = [v for _, v in sorted_items]
 
 # -----------------------------
 # Risk counting
@@ -142,6 +143,12 @@ html = f"""
 <p><b>Trade signal:</b> {trade_signal}</p>
 <hr>
 <img src="cid:dash">
+"""
+
+html += f"""
+<p><b>Cross-asset signal:</b>
+Gold Z={gold_z:.2f}, BTC Z={btc_z:.2f}
+</p>
 """
 
 
