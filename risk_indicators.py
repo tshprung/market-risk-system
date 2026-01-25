@@ -218,6 +218,22 @@ def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
     if btc_z > 1.0:
         score -= 0.5
 
+def btc_equity_correlation(sp500_prices: pd.Series, btc_prices: pd.Series, window=20):
+    """
+    Returns 0-1 score:
+    - 1 = BTC trending opposite SPX (early risk-off)
+    - 0 = positive or neutral correlation
+    """
+    sp_ret = sp500_prices.pct_change().dropna()
+    btc_ret = btc_prices.pct_change().dropna()
+    
+    if len(sp_ret) < window or len(btc_ret) < window:
+        return 0.0
+    
+    corr = sp_ret.rolling(window).corr(btc_ret).iloc[-1]
+    
+    # Negative correlation → early risk-off → score 1, positive → 0
+    return min(max(-corr, 0.0), 1.0)
     # Clamp score to -1 .. 1
     score = max(min(score, 1.0), -1.0)
 
