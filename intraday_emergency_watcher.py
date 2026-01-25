@@ -4,6 +4,7 @@ import smtplib
 import yfinance as yf
 from datetime import datetime
 from email.message import EmailMessage
+from trade_signals import STATE_FILE as TRADE_STATE_FILE
 
 from risk_indicators import (
     volatility_expansion_score,
@@ -32,6 +33,8 @@ score = (
     0.3 * options_hedging_score()
 )
 
+alerts = []
+
 sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
 btc_prices = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
 
@@ -44,7 +47,18 @@ if btc_corr_score > 0.6:
 # -----------------------------
 # Cross-asset confirmation
 # -----------------------------
-alerts = []
+
+# --- Load latest trade signal ---
+try:
+    with open(TRADE_STATE_FILE) as f:
+        trade_state = json.load(f)
+except:
+    trade_state = {"signal": "HOLD"}
+
+trade_signal = trade_state.get("signal", "HOLD")
+
+# --- Append to alerts ---
+alerts.append(f"Trade signal: {trade_signal}")
 
 # Fetch gold and BTC prices
 gold_prices = yf.download("GLD", period="3mo", progress=False)["Close"]
@@ -122,9 +136,8 @@ alert_text = "\n".join(alerts) if alerts else "No additional signals."
 
 msg.set_content(
     f"Composite intraday risk score: {score}/100\n\n"
-    f"{alert_text}\n\n"
-    "Signals indicate rapid deterioration in market microstructure.\n"
-    "Often precedes broader risk-off moves.\n\n"
+    f"Signals indicate rapid deterioration in market microstructure.\n"
+    f"{', '.join(alerts)}\n\n"
     f"UTC Time: {datetime.utcnow().isoformat()}"
 )
 
