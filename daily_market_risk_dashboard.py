@@ -1,3 +1,4 @@
+import os
 import json
 import smtplib
 import matplotlib.pyplot as plt
@@ -14,7 +15,8 @@ from risk_indicators import (
 
 EMAIL_FROM = "tshprung@gmail.com"
 EMAIL_TO = "tshprung@gmail.com"
-EMAIL_PASSWORD = "efhk szhz humo zpmj"
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
