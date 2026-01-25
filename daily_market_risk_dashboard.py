@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+from trade_signals import STATE_FILE as TRADE_STATE_FILE
 from risk_indicators import (
     get_close_series,
     volatility_expansion_score,
@@ -122,9 +123,18 @@ plt.close()
 # -----------------------------
 # Email
 # -----------------------------
+# Load trade signal
+try:
+    with open(TRADE_STATE_FILE) as f:
+        trade_state = json.load(f)
+except:
+    trade_state = {"signal": "HOLD"}
+
+trade_signal = trade_state.get("signal", "HOLD")
+
 msg = MIMEMultipart("related")
 msg["From"], msg["To"] = EMAIL_FROM, EMAIL_TO
-msg["Subject"] = f"Market Risk {emoji} | Cash {cash}% | {change}"
+msg["Subject"] = f"Market Risk {emoji} | Cash {cash}% | {change} | Trade Signal: {trade_signal}"
 
 html = f"""
 <p><b>Guidance:</b> {guidance}</p>
@@ -132,6 +142,7 @@ html = f"""
 <p><b>{change}</b></p>
 <img src="cid:dash">
 """
+html += f"<p><b>Trade signal:</b> {trade_signal}</p>"
 
 msg.attach(MIMEText(html, "html"))
 with open(OUTPUT_FILE, "rb") as f:
