@@ -1,8 +1,6 @@
 __pycache__/
 venv/
 *.png
-*.json
-*.log
 
 # secrets
 .env
