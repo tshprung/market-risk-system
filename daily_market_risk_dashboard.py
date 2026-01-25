@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
-
 from risk_indicators import (
+    get_close_series,
     volatility_expansion_score,
     options_hedging_score,
     credit_stress_score,
@@ -29,32 +29,52 @@ OUTPUT_FILE = "risk_dashboard.png"
 
 GREEN, RED = 0.33, 0.66
 
+# -----------------------------
+# Compute all scores
+# -----------------------------
+gold_prices = get_close_series("GLD")
+btc_prices = get_close_series("BTC-USD")
+cross_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
+
 scores = {
     "Volatility expansion": volatility_expansion_score(),
     "Options hedging stress": options_hedging_score(),
     "Credit stress": credit_stress_score(),
     "Small-cap underperformance": small_cap_score(),
-    "Cross-asset confirmation": gold_crypto_confirmation(get_close_series("GLD"), get_close_series("BTC-USD"))[0],  # only score
+    "Cross-asset confirmation": cross_score,
     "Volatility compression": volatility_compression_score(),
     "Credit complacency": credit_complacency_score(),
     "Breadth divergence": breadth_divergence_score()
 }
 
+# Ensure numeric values
+for k in scores:
+    if scores[k] is None or not isinstance(scores[k], (int, float)):
+        scores[k] = 0.0
+
 risk_levels = list(scores.values())
 indicators = list(scores.keys())
 
+# -----------------------------
+# Risk counting
+# -----------------------------
 red_count = int(sum(float(r) >= RED for r in risk_levels))
 yellow_count = int(sum(GREEN <= float(r) < RED for r in risk_levels))
 
+# -----------------------------
+# Forced selling probability
+# -----------------------------
 forced_selling = min(
     0.35 * scores["Credit stress"] +
     0.35 * scores["Options hedging stress"] +
-    0.30 * scores["Volatility expansion (early)"],
+    0.30 * scores["Volatility expansion"],  # fixed key
     1.0
 )
-
 forced_pct = int(forced_selling * 100)
 
+# -----------------------------
+# Guidance & emoji
+# -----------------------------
 if red_count < 1:
     guidance, cash, emoji = "Normal conditions.", 10, "🟡"
 elif red_count < 2:
@@ -64,6 +84,9 @@ elif red_count < 3:
 else:
     guidance, cash, emoji = "Crisis regime.", 85, "🚨"
 
+# -----------------------------
+# Track changes vs yesterday
+# -----------------------------
 try:
     with open(STATE_FILE) as f:
         prev = json.load(f)
@@ -77,9 +100,13 @@ if prev:
     elif red_count < prev.get("red", 0):
         change = "↓ Risk easing"
 
+# Save today's state
 with open(STATE_FILE, "w") as f:
     json.dump({"red": red_count, "yellow": yellow_count}, f)
 
+# -----------------------------
+# Colors & plot
+# -----------------------------
 colors = ["green" if r < GREEN else "gold" if r < RED else "red" for r in risk_levels]
 
 plt.figure(figsize=(9, 4))
@@ -92,6 +119,9 @@ plt.tight_layout()
 plt.savefig(OUTPUT_FILE)
 plt.close()
 
+# -----------------------------
+# Email
+# -----------------------------
 msg = MIMEMultipart("related")
 msg["From"], msg["To"] = EMAIL_FROM, EMAIL_TO
 msg["Subject"] = f"Market Risk {emoji} | Cash {cash}% | {change}"
