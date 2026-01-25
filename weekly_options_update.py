@@ -1,10 +1,12 @@
+import os
 import smtplib
 from email.message import EmailMessage
 from risk_indicators import options_hedging_score, options_percentile
 
 EMAIL_FROM = "tshprung@gmail.com"
 EMAIL_TO = "tshprung@gmail.com"
-EMAIL_PASSWORD = "efhk szhz humo zpmj"
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
