@@ -182,3 +182,43 @@ def cross_asset_confirmation_score():
         score -= normalize_z(btc_z) * 0.5
 
     return min(max(score / 2.0, 0.0), 1.0)
+
+def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
+    """
+    Returns:
+    - confirmation_score (float, -1..1)
+    - gold_z (float)
+    - btc_z (float)
+    
+    Logic:
+    - Gold rising (Z>1) = risk-off
+    - BTC falling (Z<-1) = risk-off
+    - Opposite moves reduce score (risk-on)
+    """
+    gold_ret = gold_prices.pct_change().dropna()
+    btc_ret = btc_prices.pct_change().dropna()
+
+    if gold_ret.empty or btc_ret.empty:
+        return 0.0, 0.0, 0.0
+
+    gold_z = rolling_zscore(gold_ret, 20).iloc[-1]
+    btc_z = rolling_zscore(btc_ret, 20).iloc[-1]
+
+    score = 0.0
+
+    # Risk-off confirmation
+    if gold_z > 1.0:
+        score += 0.5
+    if btc_z < -1.0:
+        score += 0.5
+
+    # Risk-on contradiction
+    if gold_z < -1.0:
+        score -= 0.5
+    if btc_z > 1.0:
+        score -= 0.5
+
+    # Clamp score to -1 .. 1
+    score = max(min(score, 1.0), -1.0)
+
+    return score, float(gold_z), float(btc_z)
