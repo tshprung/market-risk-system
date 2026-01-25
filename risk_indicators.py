@@ -7,7 +7,7 @@ from scipy.stats import percentileofscore
 # DATA HELPERS
 # ======================
 
-def get_close_series(ticker, period="6mo", interval=None):
+def get_close_series(ticker, period="6mo", interval="1d"):
     df = yf.download(ticker, period=period, interval=interval, progress=False)
     if df.empty:
         return pd.Series(dtype=float)
