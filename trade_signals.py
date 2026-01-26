@@ -5,7 +5,10 @@ from risk_indicators import (
     credit_stress_score,
     gold_crypto_confirmation,
     btc_equity_correlation,
-    risk_acceleration_score
+    risk_acceleration_score,
+    check_drawdown,
+    check_recovery,
+    get_persistent_risk
 )
 import yfinance as yf
 import json
@@ -14,6 +17,11 @@ from datetime import datetime, timedelta, timezone
 STATE_FILE = "trade_signal_state.json"
 SELL_COOLDOWN_DAYS = 5
 BUY_COOLDOWN_DAYS = 3
+
+# Thresholds
+SELL_THRESHOLD = 0.7
+REBUY_THRESHOLD = 0.4  # Raised from 0.3 for earlier re-entry
+PERSISTENCE_DAYS = 2
 
 # --- Load State ---
 if not os.path.exists(STATE_FILE):
@@ -42,32 +50,60 @@ options_score  = options_hedging_score()
 cross_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
 btc_corr_score = btc_equity_correlation(sp500_prices, btc_prices)
 
+# Composite (before acceleration)
+base_composite = (
+    0.35 * vol_score + 
+    0.30 * credit_score + 
+    0.25 * options_score + 
+    0.10 * max(cross_score, 0.0)  # Only count positive cross-asset confirmation
+)
+
+# Track history
+recent_scores.append(base_composite)
+recent_scores = recent_scores[-20:]  # Keep 20 days
+
 # Acceleration
-recent_scores.append(vol_score*0.4 + credit_score*0.3 + options_score*0.3)
-recent_scores = recent_scores[-20:] 
 accel_score = risk_acceleration_score(recent_scores)
 
-# Composite (Clamped 0-1)
-composite = min(max(
-    (0.4*vol_score + 0.3*credit_score + 0.3*options_score + 
-     0.15*cross_score + 0.15*btc_corr_score + 0.15*accel_score), 0.0), 1.0)
+# Final composite with acceleration boost
+composite = min(max(base_composite + 0.15 * accel_score, 0.0), 1.0)
 composite_pct = int(composite * 100)
 
 # --- Decision Logic ---
 signal = "HOLD"
-sell_condition = composite > 0.7  # Example threshold
-rebuy_condition = composite < 0.3 # Example threshold
+reason = ""
 
-if sell_condition:
+# SELL CONDITIONS (either/or)
+drawdown_alert = check_drawdown()
+persistent_high_risk = get_persistent_risk(recent_scores, SELL_THRESHOLD, PERSISTENCE_DAYS)
+
+if drawdown_alert:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
+        reason = "Drawdown circuit breaker triggered"
     else:
         signal = "HOLD (sell cooldown)"
-elif rebuy_condition:
+        reason = "Drawdown detected but in cooldown"
+        
+elif composite > SELL_THRESHOLD and persistent_high_risk:
+    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+        signal = "SELL"
+        reason = f"Composite {composite_pct}% for {PERSISTENCE_DAYS}+ days"
+    else:
+        signal = "HOLD (sell cooldown)"
+        reason = "High risk but in cooldown"
+
+# REBUY CONDITIONS (recovery + low composite)
+elif composite < REBUY_THRESHOLD and check_recovery():
     if not in_cooldown(state, "REBUY", BUY_COOLDOWN_DAYS):
         signal = "REBUY"
+        reason = f"Recovery confirmed, composite {composite_pct}%"
     else:
         signal = "HOLD (rebuy cooldown)"
+        reason = "Recovery detected but in cooldown"
+
+else:
+    reason = f"Composite {composite_pct}%, no clear signal"
 
 # --- Update and Save State ---
 if signal in ["SELL", "REBUY"]:
@@ -76,12 +112,23 @@ if signal in ["SELL", "REBUY"]:
 
 state.update({
     "signal": signal,
+    "reason": reason,
     "recent_scores": recent_scores,
-    "composite_pct": composite_pct
+    "composite_pct": composite_pct,
+    "vol_score": round(vol_score, 2),
+    "credit_score": round(credit_score, 2),
+    "options_score": round(options_score, 2),
+    "accel_score": round(accel_score, 2),
+    "drawdown_alert": drawdown_alert
 })
 
 with open(STATE_FILE, "w") as f:
     json.dump(state, f, indent=4)
 
+# --- Console Output ---
 print(f"Composite: {composite_pct}/100 | Signal: {signal}")
-print(f"Gold Z: {gold_z:.2f}, BTC Z: {btc_z:.2f}, BTC/SPX Corr: {btc_corr_score:.2f}")
+print(f"Reason: {reason}")
+print(f"Drawdown Alert: {drawdown_alert}")
+print(f"Vol: {vol_score:.2f} | Credit: {credit_score:.2f} | Options: {options_score:.2f}")
+print(f"Gold Z: {gold_z:.2f} | BTC Z: {btc_z:.2f} | BTC/SPX Corr: {btc_corr_score:.2f}")
+print(f"Acceleration: {accel_score:.2f}")
