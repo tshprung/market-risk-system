@@ -17,7 +17,12 @@ from risk_indicators import (
     credit_complacency_score,
     breadth_divergence_score,
     check_drawdown,
-    check_recovery
+    check_recovery,
+    put_call_ratio_score,
+    credit_spread_score,
+    breadth_score,
+    dollar_strength_score,
+    yield_curve_score
 )
 
 EMAIL_FROM = "tshprung@gmail.com"
@@ -43,10 +48,15 @@ scores = {
     "Volatility expansion": volatility_expansion_score(),
     "Options hedging stress": options_hedging_score(),
     "Credit stress": credit_stress_score(),
-    "Cross-asset confirmation": max(cross_score, 0.0),  # Only positive confirmation
+    "Cross-asset confirmation": max(cross_score, 0.0),
     "Volatility compression": volatility_compression_score(),
     "Credit complacency": credit_complacency_score(),
-    "Breadth divergence": breadth_divergence_score()
+    "Breadth divergence": breadth_divergence_score(),
+    "Put/Call ratio": put_call_ratio_score(),
+    "Credit spread (HY-IG)": credit_spread_score(),
+    "Market breadth": breadth_score(),
+    "Dollar strength": dollar_strength_score(),
+    "Yield curve inversion": yield_curve_score()
 }
 
 # Ensure numeric values
@@ -117,36 +127,15 @@ except:
     prev = {}
 
 change = "No material change"
-score_changes = {}
-
 if prev:
     if red_count > prev.get("red", 0):
         change = "↑ Risk increasing"
     elif red_count < prev.get("red", 0):
         change = "↓ Risk easing"
-    
-    # Track individual score changes
-    prev_scores = prev.get("scores", {})
-    for k, v in scores.items():
-        prev_val = prev_scores.get(k, v)
-        if v > prev_val + 0.1:
-            score_changes[k] = "↑"
-        elif v < prev_val - 0.1:
-            score_changes[k] = "↓"
-        else:
-            score_changes[k] = "→"
-else:
-    # First run - no previous data
-    score_changes = {k: "→" for k in scores.keys()}
 
-# Save today's state (convert all to native Python types)
+# Save today's state
 with open(STATE_FILE, "w") as f:
-    json.dump({
-        "red": int(red_count), 
-        "yellow": int(yellow_count), 
-        "drawdown": bool(drawdown_alert),
-        "scores": {k: float(v) for k, v in scores.items()}
-    }, f)
+    json.dump({"red": red_count, "yellow": yellow_count, "drawdown": drawdown_alert}, f)
 
 # -----------------------------
 # Colors & plot

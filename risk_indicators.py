@@ -35,26 +35,6 @@ def normalize_z(z, cap=3.0):
 # ======================
 # INDICATORS
 # ======================
-
-def vix_spike_score():
-    """
-    Detects rapid VIX spikes (2018-style flash crashes).
-    Returns 0-1 score based on 1-3 day VIX acceleration.
-    """
-    vix = get_close_series("^VIX", "2mo")
-    if len(vix) < 5:
-        return 0.0
-    
-    # Check 1-day, 2-day, 3-day spikes
-    spike_1d = (vix.iloc[-1] / vix.iloc[-2]) - 1
-    spike_2d = (vix.iloc[-1] / vix.iloc[-3]) - 1
-    spike_3d = (vix.iloc[-1] / vix.iloc[-4]) - 1
-    
-    max_spike = max(spike_1d, spike_2d, spike_3d)
-    
-    # 30%+ spike in 1-3 days = max score
-    return min(max(max_spike / 0.30, 0.0), 1.0)
-	
 def volatility_expansion_score():
     vix = get_close_series("^VIX", "6mo")
     if len(vix) < 10:
@@ -304,3 +284,105 @@ def get_persistent_risk(recent_scores: List[float], threshold=0.7, days=2):
     if len(recent_scores) < days:
         return False
     return sum(s > threshold for s in recent_scores[-days:]) >= days
+
+def vix_spike_score():
+    """
+    Detects rapid VIX spikes (2018-style flash crashes).
+    Returns 0-1 score based on 1-3 day VIX acceleration.
+    """
+    vix = get_close_series("^VIX", "2mo")
+    if len(vix) < 5:
+        return 0.0
+    
+    # Check 1-day, 2-day, 3-day spikes
+    spike_1d = (vix.iloc[-1] / vix.iloc[-2]) - 1
+    spike_2d = (vix.iloc[-1] / vix.iloc[-3]) - 1
+    spike_3d = (vix.iloc[-1] / vix.iloc[-4]) - 1
+    
+    max_spike = max(spike_1d, spike_2d, spike_3d)
+    
+    # 30%+ spike in 1-3 days = max score
+    return min(max(max_spike / 0.30, 0.0), 1.0)
+
+# ======================
+# NEW INDICATORS
+# ======================
+
+def put_call_ratio_score(window: int = 60):
+    """
+    Detects elevated put buying (panic protection).
+    High score = investors hedging aggressively = fear.
+    Uses VIX/VIX3M as proxy for put/call ratio.
+    """
+    vix = get_close_series("^VIX", "1y")
+    vix3m = get_close_series("^VIX3M", "1y")
+    if vix.empty or vix3m.empty:
+        return 0.0
+    
+    # Ratio > 1 means near-term fear > long-term
+    ratio = vix / vix3m
+    z = zscore(ratio.dropna(), window)
+    return normalize_z(z)
+
+def credit_spread_score(window: int = 120):
+    """
+    High yield spread (HYG-LQD) expansion.
+    High score = credit markets pricing in stress.
+    """
+    hyg = get_close_series("HYG", "1y")  # High yield
+    lqd = get_close_series("LQD", "1y")  # Investment grade
+    if hyg.empty or lqd.empty:
+        return 0.0
+    
+    # Underperformance of HY vs IG = spread widening
+    spread = lqd.pct_change() - hyg.pct_change()
+    z = zscore(spread.dropna(), window)
+    return normalize_z(z)
+
+def breadth_score(window: int = 60):
+    """
+    Advance/Decline line divergence.
+    High score = narrow rally, few stocks supporting market.
+    """
+    spy = get_close_series("SPY", "6mo")
+    iwm = get_close_series("IWM", "6mo")  # Small caps as breadth proxy
+    if len(spy) < window or len(iwm) < window:
+        return 0.0
+    
+    # Small cap underperformance = weak breadth
+    rel = iwm.pct_change() - spy.pct_change()
+    z = zscore(rel.dropna(), window)
+    return normalize_z(-z)  # Negative rel = high score
+
+def dollar_strength_score(window: int = 60):
+    """
+    Dollar strength (DXY) as safe haven indicator.
+    High score = strong dollar = global stress.
+    """
+    dxy = get_close_series("DX-Y.NYB", "6mo")  # Dollar index
+    if dxy.empty:
+        # Fallback: use inverse of EUR/USD
+        eurusd = get_close_series("EURUSD=X", "6mo")
+        if eurusd.empty:
+            return 0.0
+        dxy = 1 / eurusd
+    
+    roc = dxy.pct_change(5).dropna()
+    z = zscore(roc, window)
+    return normalize_z(z)
+
+def yield_curve_score(window: int = 120):
+    """
+    Treasury curve inversion (2y-10y spread).
+    High score = inverted curve = recession signal.
+    """
+    ief = get_close_series("IEF", "1y")   # 7-10yr Treasury ETF
+    sho = get_close_series("SHY", "1y")   # 1-3yr Treasury ETF
+    if ief.empty or sho.empty:
+        return 0.0
+    
+    # When short > long, spread is negative (inversion)
+    # SHY outperforming IEF = curve flattening/inverting
+    spread = ief.pct_change() - sho.pct_change()
+    z = zscore(spread.dropna(), window)
+    return normalize_z(-z)  # Negative spread = high score
