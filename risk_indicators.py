@@ -35,6 +35,26 @@ def normalize_z(z, cap=3.0):
 # ======================
 # INDICATORS
 # ======================
+
+def vix_spike_score():
+    """
+    Detects rapid VIX spikes (2018-style flash crashes).
+    Returns 0-1 score based on 1-3 day VIX acceleration.
+    """
+    vix = get_close_series("^VIX", "2mo")
+    if len(vix) < 5:
+        return 0.0
+    
+    # Check 1-day, 2-day, 3-day spikes
+    spike_1d = (vix.iloc[-1] / vix.iloc[-2]) - 1
+    spike_2d = (vix.iloc[-1] / vix.iloc[-3]) - 1
+    spike_3d = (vix.iloc[-1] / vix.iloc[-4]) - 1
+    
+    max_spike = max(spike_1d, spike_2d, spike_3d)
+    
+    # 30%+ spike in 1-3 days = max score
+    return min(max(max_spike / 0.30, 0.0), 1.0)
+	
 def volatility_expansion_score():
     vix = get_close_series("^VIX", "6mo")
     if len(vix) < 10:
