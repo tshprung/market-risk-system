@@ -5,7 +5,17 @@
     "recent_scores": [
         0.3556819013846612,
         0.35568131658785707,
-        0.35568158498977037
+        0.35568158498977037,
+        0.2857934463983854,
+        0.285793507197335
     ],
-    "composite_pct": 43
+    "composite_pct": 33,
+    "reason": "Composite 33%, no clear signal",
+    "vol_score": 0.58,
+    "credit_score": 0.3,
+    "options_score": 0.11,
+    "spike_score": 0.1,
+    "accel_score": 0.33,
+    "drawdown_alert": false,
+    "vix_spike_alert": false
 }
