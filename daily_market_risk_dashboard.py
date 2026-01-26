@@ -1,6 +1,7 @@
 import os
 import json
 import smtplib
+import numpy as np
 import matplotlib.pyplot as plt
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -80,6 +81,11 @@ forced_selling = min(
     0.30 * scores["Volatility expansion"],
     1.0
 )
+
+# Handle NaN
+if pd.isna(forced_selling) or np.isnan(forced_selling):
+    forced_selling = 0.0
+
 forced_pct = int(forced_selling * 100)
 
 # -----------------------------
