@@ -119,7 +119,7 @@ state.update({
     "credit_score": round(credit_score, 2),
     "options_score": round(options_score, 2),
     "accel_score": round(accel_score, 2),
-    "drawdown_alert": drawdown_alert
+    "drawdown_alert": bool(drawdown_alert)
 })
 
 with open(STATE_FILE, "w") as f:
