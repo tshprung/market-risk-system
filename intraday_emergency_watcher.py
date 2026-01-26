@@ -12,7 +12,9 @@ from risk_indicators import (
     options_hedging_score,
     gold_crypto_confirmation,
     risk_acceleration_score,
-    btc_equity_correlation
+    btc_equity_correlation,
+    check_drawdown,
+    get_close_series
 )
 
 STATE_FILE = "intraday_state.json"
@@ -24,31 +26,56 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
+# Thresholds
+EARLY_WARNING_THRESHOLD = 40
+HIGH_RISK_THRESHOLD = 60
+EMERGENCY_THRESHOLD = 80
+
 # -----------------------------
 # Compute base scores
 # -----------------------------
 score = (
-    0.4 * volatility_expansion_score() +
-    0.3 * credit_stress_score() +
-    0.3 * options_hedging_score()
+    0.35 * volatility_expansion_score() +
+    0.30 * credit_stress_score() +
+    0.25 * options_hedging_score()
 )
 
 alerts = []
 
-sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
-btc_prices = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
+# -----------------------------
+# Check drawdown circuit breaker
+# -----------------------------
+drawdown_alert = check_drawdown()
+if drawdown_alert:
+    score += 20  # Major boost to score
+    alerts.append("⚠️ DRAWDOWN CIRCUIT BREAKER TRIGGERED")
+
+# -----------------------------
+# BTC/SPX correlation
+# -----------------------------
+sp500_prices = get_close_series("^GSPC", "3mo")
+btc_prices = get_close_series("BTC-USD", "3mo")
 
 btc_corr_score = btc_equity_correlation(sp500_prices, btc_prices)
-score += 0.15 * btc_corr_score  # weight of correlation in total intraday score
+score += 0.10 * btc_corr_score * 100
 
 if btc_corr_score > 0.6:
-    alerts.append(f"BTC vs SPX negative correlation detected: {btc_corr_score:.2f}")
+    alerts.append(f"BTC/SPX negative correlation: {btc_corr_score:.2f}")
 
 # -----------------------------
 # Cross-asset confirmation
 # -----------------------------
+gold_prices = get_close_series("GLD", "3mo")
+confirm_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
 
-# --- Load latest trade signal ---
+# Only add if risk-off (positive confirmation)
+if confirm_score > 0:
+    score += confirm_score * 10
+    alerts.append(f"Cross-asset risk-off: Gold Z={gold_z:.2f}, BTC Z={btc_z:.2f}")
+
+# -----------------------------
+# Load trade signal
+# -----------------------------
 try:
     with open(TRADE_STATE_FILE) as f:
         trade_state = json.load(f)
@@ -56,31 +83,10 @@ except:
     trade_state = {"signal": "HOLD"}
 
 trade_signal = trade_state.get("signal", "HOLD")
+trade_reason = trade_state.get("reason", "")
 
-# --- Append to alerts ---
-alerts.append(f"Trade signal: {trade_signal}")
-
-# Fetch gold and BTC prices
-gold_prices = yf.download("GLD", period="3mo", progress=False)["Close"]
-btc_prices = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
-
-confirm_score, gold_z, btc_z = gold_crypto_confirmation(
-    gold_prices,
-    btc_prices
-)
-
-score += int(confirm_score * 20)
-
-if confirm_score > 0:
-    alerts.append(
-        f"Cross-asset confirmation: Gold Z={gold_z:.2f}, BTC Z={btc_z:.2f}"
-    )
-
-# Optional: add cross-asset confirmation multiplier (if you have another score)
-# confirm = cross_asset_confirmation_score()  # only if defined
-# score += 0.15 * confirm
-# if confirm > 0.6:
-#     alerts.append("Cross-asset risk-off confirmation (Gold/BTC)")
+if trade_signal in ["SELL", "REBUY"]:
+    alerts.append(f"Trade signal: {trade_signal} - {trade_reason}")
 
 # -----------------------------
 # Load previous state and compute acceleration
@@ -89,7 +95,7 @@ try:
     with open(STATE_FILE) as f:
         prev = json.load(f)
 except:
-    prev = {"score": 0, "recent_scores": []}
+    prev = {"score": 0, "recent_scores": [], "alert_count": 0}
 
 recent_scores = prev.get("recent_scores", [])
 
@@ -99,30 +105,68 @@ recent_scores.append(score / 100)
 # Compute acceleration score (0-1)
 accel = risk_acceleration_score(recent_scores)
 
-# Apply acceleration multiplier (max doubles the score)
-score = min(int(score * (1 + accel)), 100)
+# Apply acceleration multiplier (can increase score up to 50%)
+score = min(int(score * (1 + 0.5 * accel)), 100)
+
+if accel > 0.6:
+    alerts.append(f"Risk accelerating (accel score: {accel:.2f})")
+
+# -----------------------------
+# Intraday momentum check
+# -----------------------------
+spy_1d = get_close_series("SPY", "5d", "1m")  # 1-minute bars
+if len(spy_1d) > 60:
+    hour_return = (spy_1d.iloc[-1] / spy_1d.iloc[-60]) - 1
+    if hour_return < -0.02:  # -2% in last hour
+        alerts.append(f"Intraday momentum breakdown: {hour_return*100:.1f}% last hour")
+        score = min(score + 15, 100)
 
 # -----------------------------
 # Exit if score not higher than previous or too low
 # -----------------------------
-if score < 40 or score <= prev.get("score", 0):
-    # save recent_scores anyway
+prev_score = prev.get("score", 0)
+alert_count = prev.get("alert_count", 0)
+
+# Only send if:
+# 1. Score >= threshold AND
+# 2. (Score increased OR we haven't alerted in last 3 runs)
+should_alert = score >= EARLY_WARNING_THRESHOLD and (score > prev_score or alert_count >= 3)
+
+if not should_alert:
+    # Save state but don't send
     recent_scores = recent_scores[-10:]
     with open(STATE_FILE, "w") as f:
-        json.dump({"score": prev.get("score", 0), "recent_scores": recent_scores}, f)
+        json.dump({
+            "score": score, 
+            "recent_scores": recent_scores,
+            "alert_count": alert_count + 1
+        }, f)
+    print(f"Score {score}/100 - no alert sent (prev: {prev_score}, count: {alert_count})")
     exit(0)
 
 # -----------------------------
-# Save state
+# Save state (reset alert count)
 # -----------------------------
-recent_scores = recent_scores[-10:]  # keep last 10 entries
+recent_scores = recent_scores[-10:]
 with open(STATE_FILE, "w") as f:
-    json.dump({"score": score, "recent_scores": recent_scores}, f)
+    json.dump({
+        "score": score, 
+        "recent_scores": recent_scores,
+        "alert_count": 0  # Reset since we're sending alert
+    }, f)
 
 # -----------------------------
 # Determine alert level
 # -----------------------------
-level = "EARLY WARNING" if score < 60 else "HIGH RISK" if score < 80 else "EMERGENCY"
+if score < HIGH_RISK_THRESHOLD:
+    level = "EARLY WARNING"
+    emoji = "🟡"
+elif score < EMERGENCY_THRESHOLD:
+    level = "HIGH RISK"
+    emoji = "🟠"
+else:
+    level = "EMERGENCY"
+    emoji = "🚨"
 
 # -----------------------------
 # Send email alert
@@ -130,18 +174,37 @@ level = "EARLY WARNING" if score < 60 else "HIGH RISK" if score < 80 else "EMERG
 msg = EmailMessage()
 msg["From"] = EMAIL_FROM
 msg["To"] = EMAIL_TO
-msg["Subject"] = f"{level} — Intraday Market Stress"
+msg["Subject"] = f"{emoji} {level} — Intraday Risk {score}/100"
 
-alert_text = "\n".join(alerts) if alerts else "No additional signals."
+alert_text = "\n• " + "\n• ".join(alerts) if alerts else "No specific signals."
 
-msg.set_content(
-    f"Composite intraday risk score: {score}/100\n\n"
-    f"Signals indicate rapid deterioration in market microstructure.\n"
-    f"{', '.join(alerts)}\n\n"
-    f"UTC Time: {datetime.utcnow().isoformat()}"
-)
+body = f"""
+Composite Intraday Risk Score: {score}/100
+Previous score: {prev_score}/100
+Change: {score - prev_score:+d}
 
-with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-    s.starttls()
-    s.login(EMAIL_FROM, EMAIL_PASSWORD)
-    s.send_message(msg)
+LEVEL: {level}
+
+ACTIVE SIGNALS:
+{alert_text}
+
+TRADE SIGNAL: {trade_signal}
+{trade_reason}
+
+---
+Rapid deterioration in market microstructure detected.
+UTC Time: {datetime.utcnow().isoformat()}
+
+This is an automated alert. Review conditions before acting.
+"""
+
+msg.set_content(body)
+
+try:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
+        s.starttls()
+        s.login(EMAIL_FROM, EMAIL_PASSWORD)
+        s.send_message(msg)
+    print(f"Alert sent: {level} | Score {score}/100")
+except Exception as e:
+    print(f"Email failed: {e}")
