@@ -15,15 +15,22 @@
         0.12394032523942529,
         0.12411378036344668,
         0.12463441339974893,
-        0.12463437358903065
+        0.12463437358903065,
+        0.2558183163972781,
+        0.25581837170281835
     ],
-    "composite_pct": 17,
-    "reason": "Composite 17%, no clear signal",
+    "composite_pct": 30,
+    "reason": "Composite 30%, no clear signal",
     "vol_score": 0.05,
     "credit_score": 0.3,
     "options_score": 0.0,
     "spike_score": 0.23,
     "accel_score": 0.33,
     "drawdown_alert": false,
-    "vix_spike_alert": false
+    "vix_spike_alert": false,
+    "put_call_score": 0.09,
+    "spread_score": 0.17,
+    "breadth_score": 0.9,
+    "dollar_score": 1.0,
+    "curve_score": 0.22
 }

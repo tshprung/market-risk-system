@@ -1,1 +1,1 @@
-{"red": 1, "yellow": 1, "drawdown": false, "scores": {"Volatility expansion": 0.052955272916346406, "Options hedging stress": NaN, "Credit stress": 0.2994410647164602, "Cross-asset confirmation": 0.0, "Volatility compression": 0.048949499116869626, "Credit complacency": 0.3944823662959815, "Breadth divergence": 0.8960151486358643}}
+{"red": 3, "yellow": 1, "drawdown": false}
