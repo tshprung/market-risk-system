@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from risk_indicators import (
     volatility_expansion_score,
     options_hedging_score,
@@ -52,6 +53,14 @@ spike_score    = vix_spike_score()  # NEW: Flash crash detector
 cross_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
 btc_corr_score = btc_equity_correlation(sp500_prices, btc_prices)
 
+# Ensure all scores are valid numbers
+vol_score = 0.0 if vol_score is None or np.isnan(vol_score) else vol_score
+credit_score = 0.0 if credit_score is None or np.isnan(credit_score) else credit_score
+options_score = 0.0 if options_score is None or np.isnan(options_score) else options_score
+spike_score = 0.0 if spike_score is None or np.isnan(spike_score) else spike_score
+cross_score = 0.0 if cross_score is None or np.isnan(cross_score) else cross_score
+btc_corr_score = 0.0 if btc_corr_score is None or np.isnan(btc_corr_score) else btc_corr_score
+
 # Composite (before acceleration)
 base_composite = (
     0.30 * vol_score + 
@@ -70,6 +79,11 @@ accel_score = risk_acceleration_score(recent_scores)
 
 # Final composite with acceleration boost
 composite = min(max(base_composite + 0.15 * accel_score, 0.0), 1.0)
+
+# Handle NaN
+if np.isnan(composite):
+    composite = 0.0
+
 composite_pct = int(composite * 100)
 
 # --- Decision Logic ---
