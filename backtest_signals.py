@@ -14,8 +14,10 @@ def simple_vix_score(vix, date):
     if len(window) < 60:
         return 0.0
     roc = window.pct_change(3).dropna()
+    if len(roc) == 0:
+        return 0.0
     mean, std = roc.mean(), roc.std()
-    if std == 0:
+    if std == 0 or pd.isna(std):
         return 0.0
     z = (roc.iloc[-1] - mean) / std
     return min(max(abs(z) / 3.0, 0.0), 1.0)
@@ -27,8 +29,10 @@ def simple_credit_score(hyg, ief, date):
         return 0.0
     rel = hyg_w.pct_change() - ief_w.pct_change()
     rel = rel.dropna()
+    if len(rel) == 0:
+        return 0.0
     mean, std = rel.mean(), rel.std()
-    if std == 0:
+    if std == 0 or pd.isna(std):
         return 0.0
     z = (rel.iloc[-1] - mean) / std
     return min(max(abs(z) / 3.0, 0.0), 1.0)
