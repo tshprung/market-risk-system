@@ -86,15 +86,15 @@ forced_pct = int(forced_selling * 100)
 # Guidance & emoji
 # -----------------------------
 if drawdown_alert:
-    guidance, cash, emoji = "DRAWDOWN ALERT - Consider defensive action.", 80, "🚨"
+    guidance, cash, emoji, risk_level = "DRAWDOWN ALERT - Consider defensive action.", 80, "🚨", "CRISIS"
 elif red_count < 1:
-    guidance, cash, emoji = "Normal conditions.", 10, "🟢"
+    guidance, cash, emoji, risk_level = "Normal conditions.", 10, "🟢", "LOW"
 elif red_count < 2:
-    guidance, cash, emoji = "Elevated risk. Trim exposure.", 30, "🟡"
+    guidance, cash, emoji, risk_level = "Elevated risk. Trim exposure.", 30, "🟡", "ELEVATED"
 elif red_count < 3:
-    guidance, cash, emoji = "Defensive posture recommended.", 60, "🟠"
+    guidance, cash, emoji, risk_level = "Defensive posture recommended.", 60, "🟠", "HIGH"
 else:
-    guidance, cash, emoji = "Crisis regime. Preserve capital.", 85, "🔴"
+    guidance, cash, emoji, risk_level = "Crisis regime. Preserve capital.", 85, "🔴", "CRITICAL"
 
 # Recovery override
 if recovery_signal and not drawdown_alert:
@@ -119,8 +119,8 @@ if prev:
 
 # Save today's state
 with open(STATE_FILE, "w") as f:
-    json.dump({"red": red_count, "yellow": yellow_count, "drawdown": bool(drawdown_alert)}, f)
-	
+    json.dump({"red": red_count, "yellow": yellow_count, "drawdown": drawdown_alert}, f)
+
 # -----------------------------
 # Colors & plot
 # -----------------------------
@@ -170,7 +170,7 @@ else:
 
 msg = MIMEMultipart("related")
 msg["From"], msg["To"] = EMAIL_FROM, EMAIL_TO
-msg["Subject"] = f"{subject_prefix} | Cash {cash}% | {change}"
+msg["Subject"] = f"{subject_prefix} | RISK: {risk_level} | Cash {cash}% | {change}"
 
 html = f"""
 <h2>Market Risk Dashboard</h2>
@@ -179,9 +179,29 @@ html = f"""
 <p><b>Forced selling probability:</b> {forced_pct}%</p>
 <p><b>Status change:</b> {change}</p>
 <hr>
-<h3>Trade Signal: {trade_signal}</h3>
-<p><b>Composite risk:</b> {composite_pct}%</p>
-<p><b>Reason:</b> {trade_reason}</p>
+<div style="background-color: {'#ffcccc' if trade_signal == 'SELL' else '#ccffcc' if trade_signal == 'REBUY' else '#f0f0f0'}; 
+     padding: 15px; border-left: 5px solid {'red' if trade_signal == 'SELL' else 'green' if trade_signal == 'REBUY' else 'gray'}; 
+     margin: 10px 0;">
+<h3 style="margin: 0 0 10px 0;">Trade Signal: {trade_signal}</h3>
+<p style="margin: 5px 0;"><b>Composite risk:</b> {composite_pct}%</p>
+<p style="margin: 5px 0;"><b>Reason:</b> {trade_reason}</p>
+</div>
+"""
+
+# Action items based on risk level
+actions = {
+    "LOW": "• Maintain normal allocation\n• Consider adding to positions on dips",
+    "ELEVATED": "• Trim high-beta positions\n• Raise stop-losses\n• Monitor closely",
+    "HIGH": "• Reduce exposure to 40-60% cash\n• Avoid new positions\n• Protect gains",
+    "CRITICAL": "• Move to 85%+ cash\n• Hedge remaining positions\n• Wait for clarity",
+    "CRISIS": "• Maximum defensive posture\n• Preserve capital above all\n• Do not fight the tape"
+}
+
+html += f"""
+<div style="background-color: #ffffcc; padding: 10px; border-left: 4px solid orange; margin: 10px 0;">
+<b>📋 Recommended Actions:</b><br>
+{actions.get(risk_level, '').replace(chr(10), '<br>')}
+</div>
 """
 
 if drawdown_alert:
@@ -212,6 +232,15 @@ Cross-asset confirmation: {cross_score:.2f}
 
 for indicator, score in scores.items():
     html += f"{indicator}: {score:.2f}<br>"
+
+html += f"""
+<hr>
+<p><b>Component scores (with trends):</b><br>
+"""
+
+for indicator, score in scores.items():
+    trend = score_changes.get(indicator, "→")
+    html += f"{indicator}: {score:.2f} {trend}<br>"
 
 html += """
 </p>
