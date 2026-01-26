@@ -1,0 +1,27 @@
+name: Intraday Emergency Watcher
+on:
+  schedule:
+    - cron: "30,59 14-20 * * 1-5"   # Every 30 min, 9:30am-4pm ET
+  workflow_dispatch:
+jobs:
+  intraday-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install yfinance pandas numpy scipy
+      - name: Run intraday watcher
+        env:
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python intraday_emergency_watcher.py
+      - name: Commit state
+        run: |
+          git config user.name "market-risk-bot"
+          git config user.email "bot@market-risk"
+          git add intraday_state.json || true
+          git commit -m "Intraday check" || echo "No changes"
+          git push
