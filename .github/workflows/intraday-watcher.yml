@@ -1,7 +1,7 @@
 name: Intraday Emergency Watcher
 on:
   schedule:
-    - cron: "30,59 14-20 * * 1-5"   # Every 30 min, 9:30am-4pm ET
+    - cron: "*/30 13-21 * * 1-5"   # Every 30 min, 9:30am-4pm ET
   workflow_dispatch:
 jobs:
   intraday-check:
