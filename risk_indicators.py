@@ -53,7 +53,7 @@ def volatility_compression_score(window: int = 60):
         return 0.0
 
     z = zscore(vix, window)
-    return normalize_z(-z)  # inverted: low VIX → high fragility
+    return normalize_z(-z)
 
 def credit_complacency_score(window: int = 120):
     """
@@ -76,7 +76,7 @@ def credit_complacency_score(window: int = 120):
     if std_std == 0 or np.isnan(std_std):
         return 0.0
 
-    z = (mean_std - latest_std) / std_std  # inverted: low std = high fragility
+    z = (mean_std - latest_std) / std_std
     return normalize_z(z)
 
 def breadth_divergence_score(window: int = 60):
@@ -91,7 +91,7 @@ def breadth_divergence_score(window: int = 60):
 
     rel = small.pct_change() - large.pct_change()
     z = zscore(rel.dropna(), window)
-    return normalize_z(-z)  # negative z = small caps lag → fragile
+    return normalize_z(-z)
 
 def risk_acceleration_score(composite_scores: List[float], window: int = 3):
     """
@@ -169,13 +169,11 @@ def cross_asset_confirmation_score():
 
     score = 0.0
 
-    # Risk-off confirmation
     if gold_z > 0:
         score += normalize_z(gold_z)
     if btc_z < 0:
         score += normalize_z(-btc_z)
 
-    # Risk-on contradiction (reduces confidence)
     if gold_z < 0:
         score -= normalize_z(-gold_z) * 0.5
     if btc_z > 0:
@@ -209,19 +207,16 @@ def gold_crypto_confirmation(gold_prices: pd.Series, btc_prices: pd.Series):
 
     score = 0.0
 
-    # Risk-off confirmation
     if gold_z > 1.0:
         score += 0.5
     if btc_z < -1.0:
         score += 0.5
 
-    # Risk-on contradiction
     if gold_z < -1.0:
         score -= 0.5
     if btc_z > 1.0:
         score -= 0.5
 
-    # Clamp score to -1 .. 1
     score = max(min(score, 1.0), -1.0)
 
     return score, gold_z, btc_z
@@ -238,12 +233,54 @@ def btc_equity_correlation(sp500_prices: pd.Series, btc_prices: pd.Series, windo
     if len(sp_ret) < window or len(btc_ret) < window:
         return 0.0
 
-    # Rolling correlation
     rolling_corr = sp_ret.rolling(window).corr(btc_ret)
 
-    # Take the last valid numeric value
     corr = rolling_corr.dropna().iloc[-1] if not rolling_corr.dropna().empty else 0.0
 
-    # Negative correlation → early risk-off → score 1, positive → 0
     score = min(max(-corr, 0.0), 1.0)
     return float(score)
+
+# ======================
+# NEW: DRAWDOWN & RECOVERY
+# ======================
+
+def check_drawdown(ticker="SPY", short_days=3, short_thresh=-0.05, long_days=20, long_thresh=-0.10):
+    """
+    Returns True if drawdown exceeds thresholds.
+    - short_days: rapid decline (default 3 days, -5%)
+    - long_days: sustained decline (default 20 days, -10% from peak)
+    """
+    prices = get_close_series(ticker, "2mo")
+    if len(prices) < long_days:
+        return False
+    
+    short_drop = (prices.iloc[-1] / prices.iloc[-short_days-1]) - 1
+    long_peak = prices[-long_days:].max()
+    long_drop = (prices.iloc[-1] / long_peak) - 1
+    
+    return short_drop < short_thresh or long_drop < long_thresh
+
+def check_recovery(vix_thresh=0.85, credit_thresh=-0.02, vix_days=5, credit_days=5):
+    """
+    Returns True if recovery signals present.
+    - VIX declining below recent average
+    - Credit (HYG) stabilizing
+    """
+    vix = get_close_series("^VIX", "1mo")
+    hyg = get_close_series("HYG", "1mo")
+    
+    if len(vix) < vix_days or len(hyg) < credit_days:
+        return False
+    
+    vix_falling = vix.iloc[-1] < vix[-vix_days:].mean() * vix_thresh
+    credit_stable = hyg.pct_change(credit_days).iloc[-1] > credit_thresh
+    
+    return vix_falling and credit_stable
+
+def get_persistent_risk(recent_scores: List[float], threshold=0.7, days=2):
+    """
+    Returns True if composite risk score exceeded threshold for N consecutive days.
+    """
+    if len(recent_scores) < days:
+        return False
+    return sum(s > threshold for s in recent_scores[-days:]) >= days
