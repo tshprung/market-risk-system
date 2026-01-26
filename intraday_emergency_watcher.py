@@ -1,6 +1,7 @@
 import os
 import json
 import smtplib
+import numpy as np
 import yfinance as yf
 from datetime import datetime
 from email.message import EmailMessage
@@ -106,7 +107,7 @@ recent_scores.append(score / 100)
 accel = risk_acceleration_score(recent_scores)
 
 # Apply acceleration multiplier (can increase score up to 50%)
-score = min(int(score * (1 + 0.5 * accel)), 100)
+score = min(int(np.nan_to_num(score * (1 + 0.5 * accel))), 100)
 
 if accel > 0.6:
     alerts.append(f"Risk accelerating (accel score: {accel:.2f})")

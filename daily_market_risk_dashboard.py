@@ -127,15 +127,31 @@ except:
     prev = {}
 
 change = "No material change"
+score_changes = {}
+
 if prev:
     if red_count > prev.get("red", 0):
         change = "↑ Risk increasing"
     elif red_count < prev.get("red", 0):
         change = "↓ Risk easing"
+    
+    # Track individual score changes
+    prev_scores = prev.get("scores", {})
+    for k, v in scores.items():
+        prev_val = prev_scores.get(k, v)
+        if v > prev_val + 0.1:
+            score_changes[k] = "↑"
+        elif v < prev_val - 0.1:
+            score_changes[k] = "↓"
+        else:
+            score_changes[k] = "→"
+else:
+    # First run - no previous data
+    score_changes = {k: "→" for k in scores.keys()}
 
 # Save today's state
 with open(STATE_FILE, "w") as f:
-    json.dump({"red": red_count, "yellow": yellow_count, "drawdown": drawdown_alert}, f)
+    json.dump({"red": int(red_count), "yellow": int(yellow_count), "drawdown": bool(drawdown_alert)}, f)
 
 # -----------------------------
 # Colors & plot
