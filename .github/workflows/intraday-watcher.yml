@@ -22,6 +22,7 @@ jobs:
         run: |
           git config user.name "market-risk-bot"
           git config user.email "bot@market-risk"
+          git pull --rebase || true
           git add intraday_state.json || true
           git commit -m "Intraday check" || echo "No changes"
-          git push
+          git push || echo "Push failed, state not saved"
