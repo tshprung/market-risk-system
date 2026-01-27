@@ -41,7 +41,7 @@ def calculate_rsi(prices, period=14):
     avg_gain = gain.iloc[-1]
     avg_loss = loss.iloc[-1]
     
-    if avg_loss == 0 or pd.isna(avg_loss): return 100.0
+    if pd.isna(avg_loss) or avg_loss == 0: return 100.0
     rs = avg_gain / avg_loss
     return float(100 - (100 / (1 + rs)))
 
@@ -350,20 +350,36 @@ if __name__ == "__main__":
         if new_alerts:
             html += f"<div style='background-color:#ffcccc;padding:10px;border-left:4px solid red;'><b>🚨 NEW ALERTS:</b><br>{'<br>'.join(new_alerts)}</div>"
         
-        for r in results:
-            bg = {"SELL":"#ffcccc","TRIM":"#ffe5cc","TRIM_EXTENDED":"#ffe5cc","WATCH":"#fff9cc","BUY_DIP":"#ccffcc"}.get(r["signal_type"], "#f0f0f0")
-            html += f"""
-            <div style="background-color: {bg}; padding: 10px; margin: 10px 0; border-left: 4px solid gray;">
-            <h3 style="margin: 0;">{r['emoji']} {r['symbol']} - {r['signal_type']}</h3>
-            <p><b>Price:</b> ${r['current_price']:.2f} | <b>Gain:</b> <span style="color: {'green' if r['unrealized_gain_pct'] > 0 else 'red'};">{r['unrealized_gain_pct']:+.1f}%</span><br>
-            <b>RSI:</b> {r['rsi']:.0f} | <b>Drawdown:</b> {r['drawdown']*100:.1f}%</p>
-            """
-            if r['action_note']: html += f"<p style='color:#d9534f;'><b>💡 {r['action_note']}</b></p>"
-            if r['stop_loss_price']: html += f"<p style='background:#fff3cd;padding:5px;'><b>🛑 Stop Loss:</b> ${r['stop_loss_price']:.2f}</p>"
-            if r['scaling_targets']:
-                html += "<p><b>📈 Targets:</b><br>" + "".join([f"• {t['action']} at ${t['price']:.2f}<br>" for t in r['scaling_targets']]) + "</p>"
-            if r['recovery_potential'] > 0: html += f"<p><b>Recovery:</b> {r['recovery_potential']*100:.0f}%</p>"
-            html += "</div>"
+    for r in results:
+        bg = {"SELL":"#ffcccc","TRIM":"#ffe5cc","TRIM_EXTENDED":"#ffe5cc","WATCH":"#fff9cc","BUY_DIP":"#ccffcc"}.get(r["signal_type"], "#f0f0f0")
+        html += f"""
+        <div style="background-color: {bg}; padding: 10px; margin: 10px 0; border-left: 4px solid gray;">
+        <h3 style="margin: 0;">{r['emoji']} {r['symbol']} - {r['signal_type']}</h3>
+        <p><b>Price:</b> ${r['current_price']:.2f} | <b>Shares:</b> {r['shares']:.0f} | <b>Value:</b> ${r['market_value']:,.2f}<br>
+        <b>Gain:</b> <span style="color: {'green' if r['unrealized_gain_pct'] > 0 else 'red'};">${r['unrealized_gain']:,.2f} ({r['unrealized_gain_pct']:+.1f}%)</span><br>
+        <b>RSI:</b> {r['rsi']:.0f} | <b>Drawdown:</b> {r['drawdown']*100:.1f}%</p>
+        """
+        if r['action_note']: 
+            html += f"<p style='color:#d9534f;font-weight:bold;'><b>💡 {r['action_note']}</b></p>"
+        if r['stop_loss_price']: 
+            html += f"<p style='background:#fff3cd;padding:5px;'><b>🛑 Stop Loss:</b> ${r['stop_loss_price']:.2f} ({((r['stop_loss_price']/r['current_price'])-1)*100:.1f}% from current)</p>"
+        if r['scaling_targets']:
+            html += "<p style='background:#d4edda;padding:5px;'><b>📈 Profit Targets:</b><br>" + "".join([f"• {t['action']} at ${t['price']:.2f} (+{t['gain_pct']:.0f}%) - {t['reason']}<br>" for t in r['scaling_targets']]) + "</p>"
+        if r['expected_returns']:
+            html += "<p><b>💰 Expected Returns (30% probability):</b><br>"
+            for exp in r['expected_returns']:
+                html += f"• {exp['label']}: Target ${exp['target']:.2f}, Potential ${exp['potential_gain']:,.0f}, Expected ${exp['expected_value']:,.0f}<br>"
+            html += "</p>"
+        if r['days_held']:
+            held_text = f"<b>Held:</b> {r['days_held']} days"
+            if r['earnings_date'] and r['days_to_earnings']:
+                held_text += f" | <b>Earnings:</b> {r['earnings_date']} (in {r['days_to_earnings']} days)"
+            html += f"<p style='font-size:0.9em;color:#666;'>{held_text}</p>"
+        if r['recovery_potential'] > 0: 
+            html += f"<p><b>Recovery Potential:</b> {r['recovery_potential']*100:.0f}% (Below MA50: {r['days_below_ma50']} days, Vol: {r['volatility']*100:.0f}%)</p>"
+        if r['signals']:
+            html += "<p><b>Signals:</b><br>" + "<br>".join(f"• {s}" for s in r['signals']) + "</p>"
+        html += "</div>"
             
         msg.attach(MIMEText(html, "html"))
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
