@@ -1,1 +1,57 @@
-{"TTD": {"signal_type": "SELL"}, "RGTI": {"signal_type": "SELL"}, "ABSI": {"signal_type": "SELL"}, "LI": {"signal_type": "TRIM"}, "KMB": {"signal_type": "TRIM"}, "ATGE": {"signal_type": "TRIM"}, "JD": {"signal_type": "TRIM"}, "ENPH": {"signal_type": "HOLD"}, "CE": {"signal_type": "HOLD"}, "PAGS": {"signal_type": "HOLD"}, "MOH": {"signal_type": "HOLD"}}
+{
+  "TTD": {
+    "signal_type": "SELL",
+    "price": 33.810001373291016,
+    "gain_pct": -32.61179817560746
+  },
+  "ABSI": {
+    "signal_type": "SELL",
+    "price": 2.890000104904175,
+    "gain_pct": -23.34217228370889
+  },
+  "RGTI": {
+    "signal_type": "SELL",
+    "price": 21.760000228881836,
+    "gain_pct": -27.20279172034467
+  },
+  "LI": {
+    "signal_type": "WATCH",
+    "price": 16.940000534057617,
+    "gain_pct": -1.22448668187977
+  },
+  "KMB": {
+    "signal_type": "HOLD",
+    "price": 101.13999938964844,
+    "gain_pct": 3.4409440365039434
+  },
+  "ATGE": {
+    "signal_type": "TRIM",
+    "price": 118.19999694824219,
+    "gain_pct": 24.421049419202305
+  },
+  "JD": {
+    "signal_type": "WATCH",
+    "price": 29.780000686645508,
+    "gain_pct": -4.181688884765536
+  },
+  "ENPH": {
+    "signal_type": "TRIM",
+    "price": 39.41999816894531,
+    "gain_pct": 32.28187305015206
+  },
+  "MOH": {
+    "signal_type": "HOLD",
+    "price": 201.0500030517578,
+    "gain_pct": 34.411525746263095
+  },
+  "CE": {
+    "signal_type": "HOLD",
+    "price": 47.529998779296875,
+    "gain_pct": 13.708131050949463
+  },
+  "PAGS": {
+    "signal_type": "HOLD",
+    "price": 11.329999923706055,
+    "gain_pct": 27.017936364417654
+  }
+}
