@@ -27,6 +27,7 @@ jobs:
         run: |
           git config user.name "market-risk-bot"
           git config user.email "bot@market-risk"
+          git pull --rebase || true
           git add trade_signal_state.json yesterday_state.json || true
           git commit -m "Daily dashboard update" || echo "No changes"
-          git push
+          git push || echo "Push failed, state not saved"
