@@ -27,9 +27,9 @@ RSI_OVERBOUGHT = 70
 DRAWDOWN_WARNING = -0.10
 DRAWDOWN_CRITICAL = -0.20
 VOLUME_SPIKE = 2.0
-EXTENDED_GAIN_THRESHOLD = 0.20  # 20%+ gains = consider trimming
+EXTENDED_GAIN_THRESHOLD = 0.20
 
-# Dividend-paying defensive stocks
+# Defensive dividend stocks
 DEFENSIVE_TICKERS = ["KMB", "PG", "JNJ", "KO", "PEP", "WMT", "COST"]
 
 def calculate_rsi(prices, period=14):
@@ -51,7 +51,6 @@ def get_earnings_date(symbol):
         ticker = yf.Ticker(symbol)
         calendar = ticker.calendar
         if calendar is not None and not calendar.empty:
-            # Check for different calendar formats
             if 'Earnings Date' in calendar.index:
                 e_date = calendar.loc['Earnings Date'].values[0]
             else:
@@ -125,11 +124,9 @@ def calculate_volatility(prices, period=20):
     return float(vol)
 
 def analyze_stock(symbol, shares, cost_basis, prev_state=None):
-    # Fetch 1y to ensure MA200 is available
     stock_raw = yf.download(symbol, period="1y", progress=False)
     if stock_raw.empty: return None
     
-    # Clean MultiIndex if present
     if isinstance(stock_raw.columns, pd.MultiIndex):
         stock = pd.DataFrame({
             "Close": stock_raw["Close"][symbol],
@@ -175,7 +172,6 @@ def analyze_stock(symbol, shares, cost_basis, prev_state=None):
     stop_loss_price = None
     action_note = ""
     
-    # --- SIGNAL LOGIC ---
     if drawdown < DRAWDOWN_CRITICAL:
         signals.append(f"📉 Down {drawdown*100:.1f}% from peak - CRITICAL")
         risk_score += 3
@@ -335,52 +331,55 @@ if __name__ == "__main__":
         with open(STATE_FILE, "w") as f: json.dump(current_state, f, indent=2)
         
         # Build Email
-        subject = f"Portfolio Update: {sell_count} SELL / {trim_count} TRIM" if (sell_count + trim_count) > 0 else "Portfolio: Healthy"
-        msg = MIMEMultipart(); msg["From"], msg["To"], msg["Subject"] = EMAIL_FROM, EMAIL_TO, subject
+        subject = f"🔴 Portfolio: {sell_count} SELL / {trim_count} TRIM" if (sell_count + trim_count) > 0 else "Portfolio: Healthy"
+        msg = MIMEMultipart()
+        msg["From"], msg["To"], msg["Subject"] = EMAIL_FROM, EMAIL_TO, subject
         
         html = f"""
-        <h2>Portfolio Health Report</h2>
-        <p><b>Total Value:</b> ${total_val:,.2f} | <b>Gain:</b> ${total_gain:,.2f} (<span style="color: {'green' if total_gain_pct > 0 else 'red'};">{total_gain_pct:+.1f}%</span>)</p>
-        <p><b>Portfolio Beta:</b> {p_beta:.2f} | <b>Signals:</b> {sell_count} SELL | {trim_count} TRIM | {buy_count} BUY</p>
-        """
+<h2>Portfolio Health Report</h2>
+<p><b>Total Value:</b> ${total_val:,.2f} | <b>Gain:</b> ${total_gain:,.2f} (<span style="color: {'green' if total_gain_pct > 0 else 'red'};">{total_gain_pct:+.1f}%</span>)</p>
+<p><b>Portfolio Beta:</b> {p_beta:.2f} | <b>Signals:</b> {sell_count} SELL | {trim_count} TRIM | {buy_count} BUY | {hold_count} HOLD</p>
+"""
         
         if portfolio_warnings:
-            html += f"<div style='background-color:#fff3cd;padding:10px;border-left:4px solid orange;'><b>📊 WARNINGS:</b><br>{'<br>'.join(portfolio_warnings)}</div>"
+            html += f"<div style='background-color:#fff3cd;padding:10px;border-left:4px solid orange;margin:10px 0;'><b>📊 WARNINGS:</b><br>{'<br>'.join(portfolio_warnings)}</div>"
         
         if new_alerts:
-            html += f"<div style='background-color:#ffcccc;padding:10px;border-left:4px solid red;'><b>🚨 NEW ALERTS:</b><br>{'<br>'.join(new_alerts)}</div>"
+            html += f"<div style='background-color:#ffcccc;padding:10px;border-left:4px solid red;margin:10px 0;'><b>🚨 NEW ALERTS:</b><br>{'<br>'.join(new_alerts)}</div>"
         
-    for r in results:
-        bg = {"SELL":"#ffcccc","TRIM":"#ffe5cc","TRIM_EXTENDED":"#ffe5cc","WATCH":"#fff9cc","BUY_DIP":"#ccffcc"}.get(r["signal_type"], "#f0f0f0")
-        html += f"""
-        <div style="background-color: {bg}; padding: 10px; margin: 10px 0; border-left: 4px solid gray;">
-        <h3 style="margin: 0;">{r['emoji']} {r['symbol']} - {r['signal_type']}</h3>
-        <p><b>Price:</b> ${r['current_price']:.2f} | <b>Shares:</b> {r['shares']:.0f} | <b>Value:</b> ${r['market_value']:,.2f}<br>
-        <b>Gain:</b> <span style="color: {'green' if r['unrealized_gain_pct'] > 0 else 'red'};">${r['unrealized_gain']:,.2f} ({r['unrealized_gain_pct']:+.1f}%)</span><br>
-        <b>RSI:</b> {r['rsi']:.0f} | <b>Drawdown:</b> {r['drawdown']*100:.1f}%</p>
-        """
-        if r['action_note']: 
-            html += f"<p style='color:#d9534f;font-weight:bold;'><b>💡 {r['action_note']}</b></p>"
-        if r['stop_loss_price']: 
-            html += f"<p style='background:#fff3cd;padding:5px;'><b>🛑 Stop Loss:</b> ${r['stop_loss_price']:.2f} ({((r['stop_loss_price']/r['current_price'])-1)*100:.1f}% from current)</p>"
-        if r['scaling_targets']:
-            html += "<p style='background:#d4edda;padding:5px;'><b>📈 Profit Targets:</b><br>" + "".join([f"• {t['action']} at ${t['price']:.2f} (+{t['gain_pct']:.0f}%) - {t['reason']}<br>" for t in r['scaling_targets']]) + "</p>"
-        if r['expected_returns']:
-            html += "<p><b>💰 Expected Returns (30% probability):</b><br>"
-            for exp in r['expected_returns']:
-                html += f"• {exp['label']}: Target ${exp['target']:.2f}, Potential ${exp['potential_gain']:,.0f}, Expected ${exp['expected_value']:,.0f}<br>"
-            html += "</p>"
-        if r['days_held']:
-            held_text = f"<b>Held:</b> {r['days_held']} days"
-            if r['earnings_date'] and r['days_to_earnings']:
-                held_text += f" | <b>Earnings:</b> {r['earnings_date']} (in {r['days_to_earnings']} days)"
-            html += f"<p style='font-size:0.9em;color:#666;'>{held_text}</p>"
-        if r['recovery_potential'] > 0: 
-            html += f"<p><b>Recovery Potential:</b> {r['recovery_potential']*100:.0f}% (Below MA50: {r['days_below_ma50']} days, Vol: {r['volatility']*100:.0f}%)</p>"
-        if r['signals']:
-            html += "<p><b>Signals:</b><br>" + "<br>".join(f"• {s}" for s in r['signals']) + "</p>"
-        html += "</div>"
-            
+        for r in results:
+            bg = {"SELL":"#ffcccc","TRIM":"#ffe5cc","TRIM_EXTENDED":"#ffe5cc","WATCH":"#fff9cc","BUY_DIP":"#ccffcc"}.get(r["signal_type"], "#f0f0f0")
+            html += f"""
+<div style="background-color: {bg}; padding: 10px; margin: 10px 0; border-left: 4px solid gray;">
+<h3 style="margin: 0;">{r['emoji']} {r['symbol']} - {r['signal_type'].replace('_', ' ')}</h3>
+<p><b>Price:</b> ${r['current_price']:.2f} | <b>Shares:</b> {r['shares']:.0f} | <b>Value:</b> ${r['market_value']:,.2f}<br>
+<b>Gain:</b> <span style="color: {'green' if r['unrealized_gain_pct'] > 0 else 'red'};">${r['unrealized_gain']:,.2f} ({r['unrealized_gain_pct']:+.1f}%)</span><br>
+<b>RSI:</b> {r['rsi']:.0f} | <b>Drawdown:</b> {r['drawdown']*100:.1f}%</p>
+"""
+            if r['action_note']: 
+                html += f"<p style='color:#d9534f;font-weight:bold;'>💡 {r['action_note']}</p>"
+            if r['stop_loss_price']: 
+                html += f"<p style='background:#fff3cd;padding:5px;'><b>🛑 Stop Loss:</b> ${r['stop_loss_price']:.2f} ({((r['stop_loss_price']/r['current_price'])-1)*100:.1f}% from current)</p>"
+            if r['scaling_targets']:
+                html += "<p style='background:#d4edda;padding:5px;'><b>📈 Profit Targets:</b><br>" + "".join([f"• {t['action']} at ${t['price']:.2f} (+{t['gain_pct']:.0f}%) - {t['reason']}<br>" for t in r['scaling_targets']]) + "</p>"
+            if r['expected_returns']:
+                html += "<p><b>💰 Expected Returns (30% probability):</b><br>"
+                for exp in r['expected_returns']:
+                    html += f"• {exp['label']}: Target ${exp['target']:.2f}, Potential ${exp['potential_gain']:,.0f}, Expected ${exp['expected_value']:,.0f}<br>"
+                html += "</p>"
+            if r['days_held']:
+                held_text = f"<b>Held:</b> {r['days_held']} days"
+                if r['earnings_date'] and r['days_to_earnings']:
+                    held_text += f" | <b>Earnings:</b> {r['earnings_date']} (in {r['days_to_earnings']} days)"
+                html += f"<p style='font-size:0.9em;color:#666;'>{held_text}</p>"
+            if r['recovery_potential'] > 0: 
+                html += f"<p><b>Recovery Potential:</b> {r['recovery_potential']*100:.0f}% (Below MA50: {r['days_below_ma50']} days, Vol: {r['volatility']*100:.0f}%)</p>"
+            if r['signals']:
+                html += "<p><b>Signals:</b><br>" + "<br>".join(f"• {s}" for s in r['signals']) + "</p>"
+            html += "</div>"
+        
+        html += "<hr><p style='font-size:0.9em;color:gray;'><i>Generated: " + datetime.now().strftime('%Y-%m-%d %H:%M UTC') + "</i></p>"
+        
         msg.attach(MIMEText(html, "html"))
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
             s.starttls()
@@ -390,3 +389,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
