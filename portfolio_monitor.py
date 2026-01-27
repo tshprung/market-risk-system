@@ -36,12 +36,15 @@ def calculate_rsi(prices, period=14):
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     
-    if loss.iloc[-1] == 0:
-        return 100
+    loss_val = float(loss.iloc[-1])
+    gain_val = float(gain.iloc[-1])
     
-    rs = gain / loss
+    if loss_val == 0:
+        return 100.0
+    
+    rs = gain_val / loss_val
     rsi = 100 - (100 / (1 + rs))
-    return rsi.iloc[-1]
+    return float(rsi)
 
 def analyze_stock(symbol, shares, cost_basis):
     """Analyze individual stock for signals"""
@@ -55,22 +58,22 @@ def analyze_stock(symbol, shares, cost_basis):
     volume = stock["Volume"]
     
     # Technical indicators
-    ma_50 = stock["Close"].rolling(50).mean().iloc[-1]
-    ma_200 = stock["Close"].rolling(200).mean().iloc[-1] if len(stock) >= 200 else None
+    ma_50 = float(stock["Close"].rolling(50).mean().iloc[-1])
+    ma_200 = float(stock["Close"].rolling(200).mean().iloc[-1]) if len(stock) >= 200 else None
     rsi = calculate_rsi(stock["Close"])
     
     # Peak drawdown
-    peak_price = stock["Close"].rolling(60).max().iloc[-1]
+    peak_price = float(stock["Close"].rolling(60).max().iloc[-1])
     drawdown = (current_price / peak_price) - 1
     
     # Volume analysis
-    avg_volume = volume[-20:].mean()
-    current_volume = volume.iloc[-1]
-    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
+    avg_volume = float(volume[-20:].mean())
+    current_volume = float(volume.iloc[-1])
+    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
     
     # Support/Resistance
-    week_high = stock["High"][-5:].max()
-    week_low = stock["Low"][-5:].min()
+    week_high = float(stock["High"][-5:].max())
+    week_low = float(stock["Low"][-5:].min())
     
     # Position info
     market_value = current_price * shares
