@@ -36,8 +36,8 @@ def calculate_rsi(prices, period=14):
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     
-    loss_val = float(loss.iloc[-1])
-    gain_val = float(gain.iloc[-1])
+    loss_val = loss.iloc[-1] if isinstance(loss.iloc[-1], (int, float)) else loss.iloc[-1].item()
+    gain_val = gain.iloc[-1] if isinstance(gain.iloc[-1], (int, float)) else gain.iloc[-1].item()
     
     if loss_val == 0:
         return 100.0
@@ -54,26 +54,40 @@ def analyze_stock(symbol, shares, cost_basis):
     if stock.empty:
         return None
     
-    current_price = stock["Close"].iloc[-1]
+    current_price = float(stock["Close"].iloc[-1])
     volume = stock["Volume"]
     
     # Technical indicators
-    ma_50 = float(stock["Close"].rolling(50).mean().iloc[-1])
-    ma_200 = float(stock["Close"].rolling(200).mean().iloc[-1]) if len(stock) >= 200 else None
+    ma_50_val = stock["Close"].rolling(50).mean().iloc[-1]
+    ma_50 = float(ma_50_val.item() if hasattr(ma_50_val, 'item') else ma_50_val)
+    
+    if len(stock) >= 200:
+        ma_200_val = stock["Close"].rolling(200).mean().iloc[-1]
+        ma_200 = float(ma_200_val.item() if hasattr(ma_200_val, 'item') else ma_200_val)
+    else:
+        ma_200 = None
+    
     rsi = calculate_rsi(stock["Close"])
     
     # Peak drawdown
-    peak_price = float(stock["Close"].rolling(60).max().iloc[-1])
-    drawdown = (current_price / peak_price) - 1
+    peak_val = stock["Close"].rolling(60).max().iloc[-1]
+    peak_price = float(peak_val.item() if hasattr(peak_val, 'item') else peak_val)
+    drawdown = float((current_price / peak_price) - 1)
     
     # Volume analysis
-    avg_volume = float(volume[-20:].mean())
-    current_volume = float(volume.iloc[-1])
-    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+    avg_vol = volume[-20:].mean()
+    avg_volume = float(avg_vol.item() if hasattr(avg_vol, 'item') else avg_vol)
     
-    # Support/Resistance
-    week_high = float(stock["High"][-5:].max())
-    week_low = float(stock["Low"][-5:].min())
+    curr_vol = volume.iloc[-1]
+    current_volume = float(curr_vol.item() if hasattr(curr_vol, 'item') else curr_vol)
+    volume_ratio = float(current_volume / avg_volume if avg_volume > 0 else 1.0)
+    
+    # Support/Resistance  
+    wh = stock["High"][-5:].max()
+    week_high = float(wh.item() if hasattr(wh, 'item') else wh)
+    
+    wl = stock["Low"][-5:].min()
+    week_low = float(wl.item() if hasattr(wl, 'item') else wl)
     
     # Position info
     market_value = current_price * shares
