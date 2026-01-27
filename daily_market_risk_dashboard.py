@@ -151,8 +151,11 @@ else:
 
 # Save today's state
 with open(STATE_FILE, "w") as f:
-    json.dump({"red": int(red_count), "yellow": int(yellow_count), "drawdown": bool(drawdown_alert)}, f)
-
+    json.dump({
+    "red": int(red_count), 
+    "yellow": int(yellow_count), 
+    "drawdown": bool(drawdown_alert),
+    "scores": {k: float(v) for k, v in scores.items()}}, f)
 # -----------------------------
 # Colors & plot
 # -----------------------------
