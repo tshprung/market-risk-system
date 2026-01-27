@@ -1,0 +1,29 @@
+name: Portfolio Monitor
+on:
+  schedule:
+    - cron: "0 14 * * 1-5"   # 9:00 AM ET, after market open
+    - cron: "0 21 * * 1-5"   # 4:00 PM ET, after market close
+  workflow_dispatch:
+jobs:
+  portfolio-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install yfinance pandas numpy
+      - name: Run portfolio monitor
+        env:
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python portfolio_monitor.py
+      - name: Commit state
+        run: |
+          git config user.name "market-risk-bot"
+          git config user.email "bot@market-risk"
+          git pull --rebase || true
+          git add portfolio_state.json || true
+          git commit -m "Portfolio check" || echo "No changes"
+          git push || echo "Push failed, state not saved"
