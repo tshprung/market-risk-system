@@ -92,7 +92,7 @@ def analyze_stock(symbol, shares, cost_basis):
     except:
         return None
     
-    current_price = float(stock["Close"].iloc[-1])
+    current_price = stock["Close"].iloc[-1]
     current_value = current_price * shares
     total_gain = current_value - (cost_basis * shares)
     gain_pct = (current_price / cost_basis - 1) * 100
@@ -101,29 +101,28 @@ def analyze_stock(symbol, shares, cost_basis):
     health = calculate_financial_health(symbol)
     
     # Price movement analysis
-    price_1d_ago = float(stock["Close"].iloc[-2]) if len(stock) >= 2 else current_price
-    price_1w_ago = float(stock["Close"].iloc[-5]) if len(stock) >= 5 else current_price
-    price_1m_ago = float(stock["Close"].iloc[-21]) if len(stock) >= 21 else current_price
+    price_1d_ago = stock["Close"].iloc[-2] if len(stock) >= 2 else current_price
+    price_1w_ago = stock["Close"].iloc[-5] if len(stock) >= 5 else current_price
+    price_1m_ago = stock["Close"].iloc[-21] if len(stock) >= 21 else current_price
     
     drop_1d = (current_price / price_1d_ago - 1)
     drop_1w = (current_price / price_1w_ago - 1)
     drop_1m = (current_price / price_1m_ago - 1)
     
     # Find historical peak (1 year)
-    peak_price = float(stock["Close"].max())
+    peak_price = stock["Close"].max()
     peak_date = stock["Close"].idxmax()
     drawdown_from_peak = (current_price / peak_price - 1)
     
     # Volume analysis
-    avg_volume = float(stock["Volume"].rolling(20).mean().iloc[-1])
-    current_volume = float(stock["Volume"].iloc[-1])
+    avg_volume = stock["Volume"].rolling(20).mean().iloc[-1]
+    current_volume = stock["Volume"].iloc[-1]
     volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
     
     # Calculate if stock is at good reversion level
     # Was it stable at peak for a while?
     peak_area = stock["Close"].iloc[-252:] if len(stock) >= 252 else stock["Close"]
-    stable_high_series = peak_area.quantile(0.80)
-    stable_high = float(stable_high_series.iloc[0]) if isinstance(stable_high_series, pd.Series) else float(stable_high_series)
+    stable_high = peak_area.quantile(0.80)  # 80th percentile as "stable level"
     reversion_potential = (stable_high / current_price - 1) * 100
     
     # Signal generation
