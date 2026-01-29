@@ -1,5 +1,6 @@
 """
-Portfolio Monitor - Enhanced with recovery potential and smarter signals
+Portfolio Monitor - Long-Term Mean Reversion Strategy Support
+Alerts on: delisting risk, sharp drops (buy opportunities), real threats only
 """
 import os
 import json
@@ -11,383 +12,367 @@ from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-# --- CONFIGURATION ---
+# Configuration
 EMAIL_FROM = "tshprung@gmail.com"
 EMAIL_TO = "tshprung@gmail.com"
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 PORTFOLIO_FILE = "portfolio.csv"
 STATE_FILE = "portfolio_state.json"
 
-# Risk thresholds
-RSI_OVERSOLD = 30
-RSI_OVERBOUGHT = 70
-DRAWDOWN_WARNING = -0.10
-DRAWDOWN_CRITICAL = -0.20
-VOLUME_SPIKE = 2.0
-EXTENDED_GAIN_THRESHOLD = 0.20
+# Thresholds for REAL threats only
+SHARP_DROP_1DAY = -0.15  # -15% in 1 day = alert
+SHARP_DROP_1WEEK = -0.25  # -25% in 1 week = alert
+DELISTING_RISK_PRICE = 1.00  # Stock below $1 = delisting risk
+VOLUME_SURGE = 5.0  # 5x volume spike = something happening
+BANKRUPTCY_THRESHOLD = -0.70  # -70% from peak = investigate
 
-# Defensive dividend stocks
-DEFENSIVE_TICKERS = ["KMB", "PG", "JNJ", "KO", "PEP", "WMT", "COST"]
-
-def calculate_rsi(prices, period=14):
-    if len(prices) < period: return 50.0
-    delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    
-    avg_gain = gain.iloc[-1]
-    avg_loss = loss.iloc[-1]
-    
-    if pd.isna(avg_loss) or avg_loss == 0: return 100.0
-    rs = avg_gain / avg_loss
-    return float(100 - (100 / (1 + rs)))
-
-def get_earnings_date(symbol):
-    """Get next earnings date for a stock"""
+def calculate_financial_health(symbol):
+    """Check bankruptcy/delisting risk"""
     try:
         ticker = yf.Ticker(symbol)
-        calendar = ticker.calendar
-        if calendar is not None and not calendar.empty:
-            if 'Earnings Date' in calendar.index:
-                e_date = calendar.loc['Earnings Date'].values[0]
-            else:
-                e_date = calendar.iloc[0, 0]
-                
-            earnings_date = pd.Timestamp(e_date).tz_localize(None)
-            days_until = (earnings_date - datetime.now()).days
-            return earnings_date.strftime('%Y-%m-%d'), days_until
-    except:
-        pass
-    return None, None
-
-def calculate_scaling_targets(current_price, cost_basis, gain_pct, signal_type):
-    """Calculate profit-taking targets for winners"""
-    targets = []
-    if gain_pct < 10:
-        return targets
-    
-    if 20 <= gain_pct < 50:
-        targets.append({
-            "price": cost_basis * 1.50,
-            "gain_pct": 50,
-            "action": "Sell 25%",
-            "reason": "Lock early profits"
-        })
-        targets.append({
-            "price": cost_basis * 2.00,
-            "gain_pct": 100,
-            "action": "Sell 25%",
-            "reason": "Secure double"
-        })
-    elif gain_pct >= 50:
-        targets.append({
-            "price": current_price * 1.20,
-            "gain_pct": gain_pct * 1.20,
-            "action": "Sell 30%",
-            "reason": "Take chips off table"
-        })
-        targets.append({
-            "price": current_price * 1.40,
-            "gain_pct": gain_pct * 1.40,
-            "action": "Sell 30%",
-            "reason": "Lock major gains"
-        })
-    return targets
-
-def calculate_expected_return(current_price, target_price, shares, probability=0.3):
-    """Calculate expected value of reaching a target"""
-    potential_gain = (target_price - current_price) * shares
-    expected_value = potential_gain * probability
-    return potential_gain, expected_value
-
-def calculate_days_below_ma(prices, ma_period=50):
-    """Count consecutive days price has been below moving average"""
-    if len(prices) < ma_period: return 0
-    ma = prices.rolling(ma_period).mean()
-    below_ma = prices < ma
-    count = 0
-    for val in reversed(below_ma.values):
-        if val:
-            count += 1
-        else:
-            break
-    return count
-
-def calculate_volatility(prices, period=20):
-    """Calculate recent volatility (annualized)"""
-    if len(prices) < period: return 0.0
-    returns = prices.pct_change().dropna()
-    vol = returns.tail(period).std() * np.sqrt(252)
-    return float(vol)
-
-def analyze_stock(symbol, shares, cost_basis, prev_state=None):
-    stock_raw = yf.download(symbol, period="1y", progress=False)
-    if stock_raw.empty: return None
-    
-    if isinstance(stock_raw.columns, pd.MultiIndex):
-        stock = pd.DataFrame({
-            "Close": stock_raw["Close"][symbol],
-            "Volume": stock_raw["Volume"][symbol]
-        })
-    else:
-        stock = stock_raw
+        info = ticker.info
         
+        # Financial health indicators
+        cash = info.get('totalCash', 0)
+        debt = info.get('totalDebt', 0)
+        revenue = info.get('totalRevenue', 0)
+        market_cap = info.get('marketCap', 0)
+        current_price = info.get('currentPrice', 0)
+        
+        # Risk factors
+        risks = []
+        risk_score = 0
+        
+        # Price-based delisting risk
+        if current_price < DELISTING_RISK_PRICE:
+            risks.append(f"Price ${current_price:.2f} below $1 - NASDAQ delisting risk")
+            risk_score += 30
+        
+        # Debt to cash ratio
+        if cash > 0 and debt > 0:
+            debt_ratio = debt / cash
+            if debt_ratio > 5:
+                risks.append(f"High debt: {debt_ratio:.1f}x cash")
+                risk_score += 20
+            elif debt_ratio > 2:
+                risks.append(f"Moderate debt: {debt_ratio:.1f}x cash")
+                risk_score += 10
+        
+        # No revenue (speculative)
+        if revenue == 0:
+            risks.append("No revenue - pure speculation")
+            risk_score += 15
+        
+        # Market cap risk
+        if market_cap < 100e6:  # <$100M
+            risks.append(f"Micro cap: ${market_cap/1e6:.0f}M")
+            risk_score += 10
+        
+        return {
+            'risk_score': min(risk_score, 100),
+            'risks': risks,
+            'cash': cash,
+            'debt': debt,
+            'revenue': revenue,
+            'market_cap': market_cap
+        }
+    except:
+        return {'risk_score': 0, 'risks': [], 'cash': 0, 'debt': 0, 'revenue': 0, 'market_cap': 0}
+
+def analyze_stock(symbol, shares, cost_basis):
+    """Analyze stock for mean reversion opportunities and real threats"""
+    
+    # Fetch data
+    try:
+        stock = yf.download(symbol, period="1y", progress=False)
+        if stock.empty:
+            return None
+    except:
+        return None
+    
     current_price = float(stock["Close"].iloc[-1])
-    volume = stock["Volume"]
+    current_value = current_price * shares
+    total_gain = current_value - (cost_basis * shares)
+    gain_pct = (current_price / cost_basis - 1) * 100
     
-    ma_50 = float(stock["Close"].rolling(50).mean().iloc[-1])
-    ma_200 = float(stock["Close"].rolling(200).mean().iloc[-1]) if len(stock) >= 200 else None
-    rsi = calculate_rsi(stock["Close"])
+    # Financial health check
+    health = calculate_financial_health(symbol)
     
-    peak_price = float(stock["Close"].rolling(60).max().iloc[-1])
-    drawdown = (current_price / peak_price) - 1
+    # Price movement analysis
+    price_1d_ago = float(stock["Close"].iloc[-2]) if len(stock) >= 2 else current_price
+    price_1w_ago = float(stock["Close"].iloc[-5]) if len(stock) >= 5 else current_price
+    price_1m_ago = float(stock["Close"].iloc[-21]) if len(stock) >= 21 else current_price
     
-    avg_vol = float(volume.tail(20).mean())
-    curr_vol = float(volume.iloc[-1])
-    vol_ratio = curr_vol / avg_vol if avg_vol > 0 else 1.0
+    drop_1d = (current_price / price_1d_ago - 1)
+    drop_1w = (current_price / price_1w_ago - 1)
+    drop_1m = (current_price / price_1m_ago - 1)
     
-    days_below_ma50 = calculate_days_below_ma(stock["Close"], 50)
-    volatility = calculate_volatility(stock["Close"])
+    # Find historical peak (1 year)
+    peak_price = float(stock["Close"].max())
+    peak_date = stock["Close"].idxmax()
+    drawdown_from_peak = (current_price / peak_price - 1)
     
-    days_held = None
-    if prev_state and symbol in prev_state:
-        first_seen = prev_state[symbol].get('first_seen')
-        if first_seen:
-            days_held = (datetime.now() - datetime.fromisoformat(first_seen)).days
+    # Volume analysis
+    avg_volume = float(stock["Volume"].rolling(20).mean().iloc[-1])
+    current_volume = float(stock["Volume"].iloc[-1])
+    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
     
-    earnings_date, days_to_earnings = get_earnings_date(symbol)
+    # Calculate if stock is at good reversion level
+    # Was it stable at peak for a while?
+    peak_area = stock["Close"].iloc[-252:] if len(stock) >= 252 else stock["Close"]
+    stable_high = float(peak_area.quantile(0.80))  # 80th percentile as "stable level"
+    reversion_potential = (stable_high / current_price - 1) * 100
     
-    market_value = current_price * shares
-    unrealized_gain = market_value - (cost_basis * shares)
-    gain_pct = (unrealized_gain / (cost_basis * shares)) * 100 if cost_basis > 0 else 0
-    
-    is_defensive = symbol in DEFENSIVE_TICKERS
-    
+    # Signal generation
     signals = []
     signal_type = "HOLD"
-    risk_score = 0
-    stop_loss_price = None
-    action_note = ""
+    actions = []
     
-    if drawdown < DRAWDOWN_CRITICAL:
-        signals.append(f"📉 Down {drawdown*100:.1f}% from peak - CRITICAL")
-        risk_score += 3
-        if gain_pct > 0:
-            signal_type = "TRIM_EXTENDED"
-            action_note = f"Consider trimming - up {gain_pct:.1f}% but extended"
-            stop_loss_price = current_price * 0.90
+    # 🚨 CRITICAL ALERTS (Real threats)
+    if health['risk_score'] >= 50:
+        signal_type = "🚨 URGENT"
+        signals.append(f"DELISTING RISK ({health['risk_score']}%)")
+        actions.append(f"🚨 INVESTIGATE IMMEDIATELY: {', '.join(health['risks'])}")
+    
+    # Sharp drops (potential buying opportunities OR danger)
+    if drop_1d <= SHARP_DROP_1DAY:
+        signals.append(f"📉 SHARP DROP 1-day: {drop_1d*100:.1f}%")
+        if health['risk_score'] < 30:
+            actions.append(f"💰 Consider averaging down if fundamentals intact")
         else:
-            signal_type = "SELL"
-            action_note = "Cut losses before further deterioration"
-            stop_loss_price = current_price * 0.88
-            
-    elif drawdown < DRAWDOWN_WARNING:
-        signals.append(f"⚠️ Down {drawdown*100:.1f}% from peak")
-        risk_score += 2
-        if is_defensive and gain_pct > 0:
-            signal_type = "HOLD"
-            action_note = "Defensive position - normal volatility"
-        elif gain_pct > EXTENDED_GAIN_THRESHOLD * 100:
-            signal_type = "TRIM"
-            action_note = f"Take profits - up {gain_pct:.1f}% but showing weakness"
-            stop_loss_price = cost_basis * 1.10
+            actions.append(f"⚠️ Check news - drop + high risk = danger")
+    
+    if drop_1w <= SHARP_DROP_1WEEK:
+        signals.append(f"📉 SEVERE DROP 1-week: {drop_1w*100:.1f}%")
+        if health['risk_score'] < 30:
+            actions.append(f"💰 Strong averaging down opportunity if thesis holds")
         else:
-            signal_type = "WATCH"
-            action_note = "Monitor closely for breakdown"
-            stop_loss_price = current_price * 0.90
+            actions.append(f"⚠️ HIGH RISK - verify company viability")
     
-    if current_price < ma_50:
-        signals.append(f"Below 50-day MA (${ma_50:.2f})")
-        risk_score += 1
-        if days_below_ma50 > 90:
-            signals.append(f"Broken for {days_below_ma50} days - dead money")
-            if signal_type == "HOLD": signal_type = "WATCH"
+    # Massive drawdown from peak
+    if drawdown_from_peak <= BANKRUPTCY_THRESHOLD:
+        signals.append(f"💀 DOWN {abs(drawdown_from_peak)*100:.0f}% from peak")
+        actions.append(f"⚠️ Verify company survival - extreme drop")
     
-    if ma_200 and current_price < ma_200:
-        signals.append(f"Below 200-day MA (${ma_200:.2f}) - bear market")
-        risk_score += 1
+    # Volume surge (something happening)
+    if volume_ratio >= VOLUME_SURGE:
+        signals.append(f"📢 VOLUME SURGE: {volume_ratio:.1f}x normal")
+        actions.append(f"📰 Check news - unusual activity")
     
-    if rsi < RSI_OVERSOLD:
-        signals.append(f"RSI {rsi:.0f} - OVERSOLD (potential bounce)")
-        if signal_type not in ["SELL", "TRIM", "TRIM_EXTENDED"]:
-            signal_type = "BUY_DIP"
-            action_note = "Oversold - could bounce, but confirm trend first"
-    elif rsi > RSI_OVERBOUGHT:
-        signals.append(f"RSI {rsi:.0f} - OVERBOUGHT")
-        risk_score += 1
-        if gain_pct > 15 and signal_type == "HOLD":
-            signal_type = "TRIM"
-            action_note = f"Take profits - up {gain_pct:.1f}% and extended"
+    # Mean reversion opportunity
+    if reversion_potential > 50 and health['risk_score'] < 30:
+        signals.append(f"📊 REVERSION POTENTIAL: +{reversion_potential:.0f}%")
+        actions.append(f"💡 Stock down {abs(drawdown_from_peak)*100:.0f}% from stable ${stable_high:.2f} area")
+        if gain_pct < -20:
+            actions.append(f"💰 Currently down {abs(gain_pct):.1f}% - good averaging zone")
     
-    if vol_ratio > VOLUME_SPIKE:
-        signals.append(f"Volume spike {vol_ratio:.1f}x average")
-        risk_score += 1
-    
-    recovery_potential = 0.0
-    if signal_type in ["SELL", "WATCH", "BUY_DIP"]:
-        if volatility > 0.4: recovery_potential += 0.3
-        if days_below_ma50 < 30: recovery_potential += 0.4
-        elif days_below_ma50 < 60: recovery_potential += 0.2
-        if rsi < RSI_OVERSOLD: recovery_potential += 0.3
-        recovery_potential = min(recovery_potential, 1.0)
-    
-    if signal_type == "HOLD" and gain_pct > 5:
-        if current_price > ma_50 and (ma_200 is None or current_price > ma_200):
-            if 40 < rsi < 60:
-                signals.append("✅ Uptrend intact, healthy")
-                action_note = "Strong position - hold"
-    
-    emoji_map = {"SELL": "🔴", "TRIM": "🟠", "TRIM_EXTENDED": "🟠", "WATCH": "🟡", "BUY_DIP": "🟢", "STRONG_HOLD": "💎"}
-    emoji = emoji_map.get(signal_type, "⚪")
-    
-    scaling_targets = calculate_scaling_targets(current_price, cost_basis, gain_pct, signal_type)
-    
-    expected_returns = []
-    if gain_pct > 10:
-        for multiplier, label in [(1.5, "50% gain"), (2.0, "100% gain"), (3.0, "200% gain")]:
-            target = cost_basis * multiplier
-            if target > current_price:
-                potential, expected = calculate_expected_return(current_price, target, shares, probability=0.3)
-                expected_returns.append({
-                    "target": target, "label": label, "potential_gain": potential, "expected_value": expected
-                })
+    # No urgent issues
+    if not signals:
+        signal_type = "✅ STABLE"
+        signals.append("No urgent issues")
+    elif "🚨" in str(signals):
+        signal_type = "🚨 URGENT"
+    elif "📉" in str(signals):
+        signal_type = "⚠️ ALERT"
     
     return {
-        "symbol": symbol, "current_price": current_price, "shares": shares, "cost_basis": cost_basis,
-        "market_value": market_value, "unrealized_gain": unrealized_gain, "unrealized_gain_pct": gain_pct,
-        "ma_50": ma_50, "ma_200": ma_200, "rsi": rsi, "drawdown": drawdown, "volume_ratio": vol_ratio,
-        "days_below_ma50": days_below_ma50, "volatility": volatility, "recovery_potential": recovery_potential,
-        "signals": signals, "signal_type": signal_type, "risk_score": risk_score, "emoji": emoji,
-        "stop_loss_price": stop_loss_price, "action_note": action_note, "is_defensive": is_defensive,
-        "scaling_targets": scaling_targets, "expected_returns": expected_returns, "days_held": days_held,
-        "earnings_date": earnings_date, "days_to_earnings": days_to_earnings
+        'symbol': symbol,
+        'current_price': current_price,
+        'cost_basis': cost_basis,
+        'shares': shares,
+        'gain_pct': gain_pct,
+        'total_gain': total_gain,
+        'current_value': current_value,
+        'signal_type': signal_type,
+        'signals': signals,
+        'actions': actions,
+        'health': health,
+        'peak_price': peak_price,
+        'peak_date': peak_date.strftime('%Y-%m-%d') if hasattr(peak_date, 'strftime') else str(peak_date),
+        'drawdown_from_peak': drawdown_from_peak * 100,
+        'reversion_target': stable_high,
+        'reversion_potential': reversion_potential,
+        'drop_1d': drop_1d * 100,
+        'drop_1w': drop_1w * 100,
+        'drop_1m': drop_1m * 100,
+        'volume_ratio': volume_ratio
     }
 
-def calculate_portfolio_beta(symbols):
-    try:
-        spy_df = yf.download("SPY", period="6mo", progress=False)
-        spy = spy_df["Close"] if not isinstance(spy_df.columns, pd.MultiIndex) else spy_df["Close"]["SPY"]
-        betas = []
-        for s in symbols:
-            s_df = yf.download(s, period="6mo", progress=False)
-            if s_df.empty: continue
-            stock = s_df["Close"] if not isinstance(s_df.columns, pd.MultiIndex) else s_df["Close"][s]
-            combined = pd.DataFrame({"spy": spy, "stock": stock}).dropna()
-            if len(combined) > 30:
-                returns = combined.pct_change().dropna()
-                betas.append(returns['stock'].cov(returns['spy']) / returns['spy'].var())
-        return float(np.mean(betas)) if betas else 1.0
-    except:
-        return 1.0
+def load_portfolio():
+    """Load portfolio from CSV"""
+    df = pd.read_csv(PORTFOLIO_FILE)
+    holdings = []
+    for _, row in df.iterrows():
+        holdings.append({
+            'symbol': row['Symbol'],
+            'shares': float(row['Shares']),
+            'cost_basis': float(row['Avg Cost/Share'])
+        })
+    return holdings
 
-# --- MAIN EXECUTION ---
-if __name__ == "__main__":
-    try:
-        df = pd.read_csv(PORTFOLIO_FILE)
-        try:
-            with open(STATE_FILE) as f: prev_state = json.load(f)
-        except: prev_state = {}
-        
-        results = []
-        for _, row in df.iterrows():
-            res = analyze_stock(row["Symbol"], float(row["Shares"]), float(row["Avg Cost/Share"]), prev_state)
-            if res: results.append(res)
-        
-        results.sort(key=lambda x: x["risk_score"], reverse=True)
-        
-        total_val = sum(r["market_value"] for r in results)
-        total_gain = sum(r["unrealized_gain"] for r in results)
-        total_gain_pct = (total_gain / (total_val - total_gain)) * 100 if total_val > 0 else 0
-        p_beta = calculate_portfolio_beta([r["symbol"] for r in results])
-        
-        sell_count = sum(1 for r in results if r["signal_type"] == "SELL")
-        trim_count = sum(1 for r in results if r["signal_type"] in ["TRIM", "TRIM_EXTENDED"])
-        watch_count = sum(1 for r in results if r["signal_type"] == "WATCH")
-        buy_count = sum(1 for r in results if r["signal_type"] == "BUY_DIP")
-        hold_count = len(results) - sell_count - trim_count - watch_count - buy_count
-        
-        earnings_warnings = [f"{r['symbol']} earnings in {r['days_to_earnings']} days" for r in results if r['days_to_earnings'] and 0 < r['days_to_earnings'] <= 7]
-        
-        portfolio_warnings = []
-        if sell_count >= 3: portfolio_warnings.append(f"⚠️ {sell_count} positions need selling")
-        if p_beta > 1.3 and total_gain_pct < 0: portfolio_warnings.append(f"⚠️ High risk (Beta {p_beta:.2f})")
-        if total_gain_pct < -10: portfolio_warnings.append(f"⚠️ Portfolio down {total_gain_pct:.1f}%")
-        portfolio_warnings.extend(earnings_warnings)
-        
-        new_alerts = []
-        for r in results:
-            prev_sig = prev_state.get(r["symbol"], {}).get("signal_type", "HOLD")
-            if r["signal_type"] in ["SELL", "TRIM", "TRIM_EXTENDED"] and prev_sig not in ["SELL", "TRIM", "TRIM_EXTENDED"]:
-                new_alerts.append(f"{r['emoji']} {r['symbol']} → {r['signal_type']}")
-        
-        current_state = {}
-        for r in results:
-            first_seen = prev_state.get(r["symbol"], {}).get('first_seen', datetime.now().isoformat())
-            current_state[r["symbol"]] = {"signal_type": r["signal_type"], "price": r["current_price"], "gain_pct": r["unrealized_gain_pct"], "first_seen": first_seen}
-        
-        with open(STATE_FILE, "w") as f: json.dump(current_state, f, indent=2)
-        
-        # Build Email
-        subject = f"🔴 Portfolio: {sell_count} SELL / {trim_count} TRIM" if (sell_count + trim_count) > 0 else "Portfolio: Healthy"
-        msg = MIMEMultipart()
-        msg["From"], msg["To"], msg["Subject"] = EMAIL_FROM, EMAIL_TO, subject
-        
-        html = f"""
-<h2>Portfolio Health Report</h2>
-<p><b>Total Value:</b> ${total_val:,.2f} | <b>Gain:</b> ${total_gain:,.2f} (<span style="color: {'green' if total_gain_pct > 0 else 'red'};">{total_gain_pct:+.1f}%</span>)</p>
-<p><b>Portfolio Beta:</b> {p_beta:.2f} | <b>Signals:</b> {sell_count} SELL | {trim_count} TRIM | {buy_count} BUY | {hold_count} HOLD</p>
-"""
-        
-        if portfolio_warnings:
-            html += f"<div style='background-color:#fff3cd;padding:10px;border-left:4px solid orange;margin:10px 0;'><b>📊 WARNINGS:</b><br>{'<br>'.join(portfolio_warnings)}</div>"
-        
-        if new_alerts:
-            html += f"<div style='background-color:#ffcccc;padding:10px;border-left:4px solid red;margin:10px 0;'><b>🚨 NEW ALERTS:</b><br>{'<br>'.join(new_alerts)}</div>"
-        
-        for r in results:
-            bg = {"SELL":"#ffcccc","TRIM":"#ffe5cc","TRIM_EXTENDED":"#ffe5cc","WATCH":"#fff9cc","BUY_DIP":"#ccffcc"}.get(r["signal_type"], "#f0f0f0")
+def generate_email_report(results):
+    """Generate HTML email report"""
+    
+    # Sort by urgency
+    urgent = [r for r in results if '🚨' in r['signal_type']]
+    alerts = [r for r in results if '⚠️' in r['signal_type'] and r not in urgent]
+    stable = [r for r in results if r not in urgent and r not in alerts]
+    
+    total_value = sum(r['current_value'] for r in results)
+    total_gain = sum(r['total_gain'] for r in results)
+    total_gain_pct = (total_gain / (total_value - total_gain)) * 100 if (total_value - total_gain) != 0 else 0
+    
+    html = f"""
+    <html><body style="font-family: Arial, sans-serif;">
+    <h2>📊 Portfolio Monitor - Long-Term Strategy</h2>
+    <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M ET')}</p>
+    
+    <div style="background: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+        <h3>Portfolio Summary</h3>
+        <p><strong>Total Value:</strong> ${total_value:,.2f}</p>
+        <p><strong>Total Gain:</strong> ${total_gain:,.2f} ({total_gain_pct:+.1f}%)</p>
+        <p><strong>Urgent Issues:</strong> {len(urgent)} | <strong>Alerts:</strong> {len(alerts)} | <strong>Stable:</strong> {len(stable)}</p>
+    </div>
+    """
+    
+    # Urgent section
+    if urgent:
+        html += "<h3>🚨 URGENT ATTENTION NEEDED</h3>"
+        for r in urgent:
             html += f"""
-<div style="background-color: {bg}; padding: 10px; margin: 10px 0; border-left: 4px solid gray;">
-<h3 style="margin: 0;">{r['emoji']} {r['symbol']} - {r['signal_type'].replace('_', ' ')}</h3>
-<p><b>Price:</b> ${r['current_price']:.2f} | <b>Shares:</b> {r['shares']:.0f} | <b>Value:</b> ${r['market_value']:,.2f}<br>
-<b>Gain:</b> <span style="color: {'green' if r['unrealized_gain_pct'] > 0 else 'red'};">${r['unrealized_gain']:,.2f} ({r['unrealized_gain_pct']:+.1f}%)</span><br>
-<b>RSI:</b> {r['rsi']:.0f} | <b>Drawdown:</b> {r['drawdown']*100:.1f}%</p>
-"""
-            if r['action_note']: 
-                html += f"<p style='color:#d9534f;font-weight:bold;'>💡 {r['action_note']}</p>"
-            if r['stop_loss_price']: 
-                html += f"<p style='background:#fff3cd;padding:5px;'><b>🛑 Stop Loss:</b> ${r['stop_loss_price']:.2f} ({((r['stop_loss_price']/r['current_price'])-1)*100:.1f}% from current)</p>"
-            if r['scaling_targets']:
-                html += "<p style='background:#d4edda;padding:5px;'><b>📈 Profit Targets:</b><br>" + "".join([f"• {t['action']} at ${t['price']:.2f} (+{t['gain_pct']:.0f}%) - {t['reason']}<br>" for t in r['scaling_targets']]) + "</p>"
-            if r['expected_returns']:
-                html += "<p><b>💰 Expected Returns (30% probability):</b><br>"
-                for exp in r['expected_returns']:
-                    html += f"• {exp['label']}: Target ${exp['target']:.2f}, Potential ${exp['potential_gain']:,.0f}, Expected ${exp['expected_value']:,.0f}<br>"
-                html += "</p>"
-            if r['days_held']:
-                held_text = f"<b>Held:</b> {r['days_held']} days"
-                if r['earnings_date'] and r['days_to_earnings']:
-                    held_text += f" | <b>Earnings:</b> {r['earnings_date']} (in {r['days_to_earnings']} days)"
-                html += f"<p style='font-size:0.9em;color:#666;'>{held_text}</p>"
-            if r['recovery_potential'] > 0: 
-                html += f"<p><b>Recovery Potential:</b> {r['recovery_potential']*100:.0f}% (Below MA50: {r['days_below_ma50']} days, Vol: {r['volatility']*100:.0f}%)</p>"
-            if r['signals']:
-                html += "<p><b>Signals:</b><br>" + "<br>".join(f"• {s}" for s in r['signals']) + "</p>"
-            html += "</div>"
-        
-        html += "<hr><p style='font-size:0.9em;color:gray;'><i>Generated: " + datetime.now().strftime('%Y-%m-%d %H:%M UTC') + "</i></p>"
-        
-        msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-            s.starttls()
-            s.login(EMAIL_FROM, EMAIL_PASSWORD)
-            s.send_message(msg)
-        print("✅ Portfolio report sent successfully")
+            <div style="background: #ffe6e6; padding: 15px; margin: 10px 0; border-left: 5px solid #cc0000; border-radius: 5px;">
+                <h4>{r['symbol']}: ${r['current_price']:.2f} | {r['gain_pct']:+.1f}%</h4>
+                <p><strong>Risk Score:</strong> {r['health']['risk_score']}/100</p>
+                <p><strong>Signals:</strong> {', '.join(r['signals'])}</p>
+                <p><strong>⚠️ ACTIONS:</strong></p>
+                <ul>{''.join(f"<li>{a}</li>" for a in r['actions'])}</ul>
+                <p><strong>Financial:</strong> Cash ${r['health']['cash']/1e6:.0f}M | Debt ${r['health']['debt']/1e6:.0f}M | Revenue ${r['health']['revenue']/1e6:.0f}M</p>
+            </div>
+            """
+    
+    # Alerts section
+    if alerts:
+        html += "<h3>⚠️ ALERTS (Opportunities or Concerns)</h3>"
+        for r in alerts:
+            html += f"""
+            <div style="background: #fff3cd; padding: 15px; margin: 10px 0; border-left: 5px solid #ff9800; border-radius: 5px;">
+                <h4>{r['symbol']}: ${r['current_price']:.2f} | {r['gain_pct']:+.1f}%</h4>
+                <p><strong>Peak:</strong> ${r['peak_price']:.2f} ({r['peak_date']}) | <strong>Drawdown:</strong> {r['drawdown_from_peak']:.1f}%</p>
+                <p><strong>Signals:</strong> {', '.join(r['signals'])}</p>
+                {f"<p><strong>💡 Mean Reversion Target:</strong> ${r['reversion_target']:.2f} (+{r['reversion_potential']:.0f}% upside)</p>" if r['reversion_potential'] > 50 else ""}
+                <p><strong>Actions:</strong></p>
+                <ul>{''.join(f"<li>{a}</li>" for a in r['actions'])}</ul>
+            </div>
+            """
+    
+    # Stable section (brief)
+    if stable:
+        html += "<h3>✅ STABLE HOLDINGS</h3>"
+        html += "<table style='width:100%; border-collapse: collapse;'>"
+        html += "<tr style='background: #e0e0e0;'><th>Symbol</th><th>Price</th><th>Gain</th><th>Status</th></tr>"
+        for r in stable:
+            html += f"""
+            <tr style='border-bottom: 1px solid #ddd;'>
+                <td><strong>{r['symbol']}</strong></td>
+                <td>${r['current_price']:.2f}</td>
+                <td style='color: {"green" if r["gain_pct"] > 0 else "red"};'>{r['gain_pct']:+.1f}%</td>
+                <td>{r['signals'][0]}</td>
+            </tr>
+            """
+        html += "</table>"
+    
+    html += """
+    <div style="margin-top: 30px; padding: 15px; background: #f9f9f9; border-radius: 5px;">
+        <h4>📌 Strategy Reminder</h4>
+        <p><strong>Your Approach:</strong> Long-term mean reversion</p>
+        <ul>
+            <li>✅ Hold quality stocks through volatility</li>
+            <li>💰 Average down on sharp drops if fundamentals intact</li>
+            <li>🚨 Exit only on delisting/bankruptcy risk</li>
+            <li>⏳ Wait years for reversion to stable levels</li>
+        </ul>
+    </div>
+    </body></html>
+    """
+    
+    return html
 
+def send_email(subject, html_body):
+    """Send email alert"""
+    if not EMAIL_PASSWORD:
+        print("No email password set")
+        return
+    
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = EMAIL_FROM
+        msg['To'] = EMAIL_TO
+        msg['Subject'] = subject
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"✅ Email sent: {subject}")
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Email failed: {e}")
+
+def main():
+    print(f"📊 Portfolio Monitor - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print("="*80)
+    
+    # Load portfolio
+    holdings = load_portfolio()
+    print(f"Analyzing {len(holdings)} holdings...")
+    
+    # Analyze each stock
+    results = []
+    for holding in holdings:
+        print(f"  • {holding['symbol']}...", end=" ")
+        result = analyze_stock(holding['symbol'], holding['shares'], holding['cost_basis'])
+        if result:
+            results.append(result)
+            print(f"{result['signal_type']}")
+        else:
+            print("FAILED")
+    
+    if not results:
+        print("❌ No results")
+        return
+    
+    # Count urgency
+    urgent_count = len([r for r in results if '🚨' in r['signal_type']])
+    alert_count = len([r for r in results if '⚠️' in r['signal_type']])
+    
+    print(f"\n📊 Summary: {urgent_count} urgent | {alert_count} alerts | {len(results)-urgent_count-alert_count} stable")
+    
+    # Generate report
+    html = generate_email_report(results)
+    
+    # Send email (always send, even if all stable)
+    subject = f"📊 Portfolio: "
+    if urgent_count > 0:
+        subject += f"🚨 {urgent_count} URGENT"
+    elif alert_count > 0:
+        subject += f"⚠️ {alert_count} ALERTS"
+    else:
+        subject += "✅ All Stable"
+    
+    send_email(subject, html)
+    
+    # Save state
+    state = {
+        'timestamp': datetime.now().isoformat(),
+        'results': results
+    }
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2, default=str)
+    
+    print("✅ Done")
+
+if __name__ == "__main__":
+    main()
