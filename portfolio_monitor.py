@@ -118,9 +118,9 @@ def analyze_stock(symbol, shares, cost_basis):
     avg_volume = stock["Volume"].rolling(20).mean().iloc[-1]
     current_volume = stock["Volume"].iloc[-1]
     
-    # Convert to scalars for comparison
-    avg_vol_scalar = float(avg_volume) if pd.notna(avg_volume) else 1.0
-    curr_vol_scalar = float(current_volume) if pd.notna(current_volume) else 1.0
+    # Convert to scalars properly
+    avg_vol_scalar = avg_volume.item() if hasattr(avg_volume, 'item') else float(avg_volume)
+    curr_vol_scalar = current_volume.item() if hasattr(current_volume, 'item') else float(current_volume)
     volume_ratio = curr_vol_scalar / avg_vol_scalar if avg_vol_scalar > 0 else 1.0
     
     # Calculate if stock is at good reversion level
