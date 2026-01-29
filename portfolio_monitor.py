@@ -117,7 +117,11 @@ def analyze_stock(symbol, shares, cost_basis):
     # Volume analysis
     avg_volume = stock["Volume"].rolling(20).mean().iloc[-1]
     current_volume = stock["Volume"].iloc[-1]
-    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+    
+    # Convert to scalars for comparison
+    avg_vol_scalar = float(avg_volume) if pd.notna(avg_volume) else 1.0
+    curr_vol_scalar = float(current_volume) if pd.notna(current_volume) else 1.0
+    volume_ratio = curr_vol_scalar / avg_vol_scalar if avg_vol_scalar > 0 else 1.0
     
     # Calculate if stock is at good reversion level
     # Was it stable at peak for a while?
