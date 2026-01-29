@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-01-29T07:56:39.185945",
+  "timestamp": "2026-01-29T08:00:19.171644",
   "results": [
     {
       "symbol": "TTD",
@@ -186,9 +186,9 @@
         "revenue": 16446999552,
         "market_cap": 33036642304
       },
-      "peak_price": 142.8666534423828,
+      "peak_price": 142.86663818359375,
       "peak_date": "Ticker\nKMB   2025-03-10\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -30.32663780028194,
+      "drawdown_from_peak": -30.326630358858598,
       "reversion_target": 133.6685333251953,
       "reversion_potential": 34.286248840433984,
       "drop_1d": -1.0930032599287154,
@@ -219,11 +219,11 @@
         "revenue": 9710000128,
         "market_cap": 5055840768
       },
-      "peak_price": 71.99275207519531,
+      "peak_price": 71.99274444580078,
       "peak_date": "Ticker\nCE   2025-01-30\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -35.868546710477936,
-      "reversion_target": 56.66268539428711,
-      "reversion_potential": 22.7262023856855,
+      "drawdown_from_peak": -35.86853991417974,
+      "reversion_target": 56.662681579589844,
+      "reversion_potential": 22.72619412339956,
       "drop_1d": -1.472476381602572,
       "drop_1w": -3.7724080670273663,
       "drop_1m": 7.647467535493857,
