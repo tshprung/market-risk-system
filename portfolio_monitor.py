@@ -122,7 +122,8 @@ def analyze_stock(symbol, shares, cost_basis):
     # Calculate if stock is at good reversion level
     # Was it stable at peak for a while?
     peak_area = stock["Close"].iloc[-252:] if len(stock) >= 252 else stock["Close"]
-    stable_high = float(peak_area.quantile(0.80))  # 80th percentile as "stable level"
+    stable_high_series = peak_area.quantile(0.80)
+    stable_high = float(stable_high_series.iloc[0]) if isinstance(stable_high_series, pd.Series) else float(stable_high_series)
     reversion_potential = (stable_high / current_price - 1) * 100
     
     # Signal generation
