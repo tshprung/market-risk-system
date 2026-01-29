@@ -92,7 +92,8 @@ def analyze_stock(symbol, shares, cost_basis):
     except:
         return None
     
-    current_price = stock["Close"].iloc[-1]
+    # Convert all values to Python scalars immediately
+    current_price = stock["Close"].iloc[-1].item()
     current_value = current_price * shares
     total_gain = current_value - (cost_basis * shares)
     gain_pct = (current_price / cost_basis - 1) * 100
@@ -100,33 +101,28 @@ def analyze_stock(symbol, shares, cost_basis):
     # Financial health check
     health = calculate_financial_health(symbol)
     
-    # Price movement analysis
-    price_1d_ago = stock["Close"].iloc[-2] if len(stock) >= 2 else current_price
-    price_1w_ago = stock["Close"].iloc[-5] if len(stock) >= 5 else current_price
-    price_1m_ago = stock["Close"].iloc[-21] if len(stock) >= 21 else current_price
+    # Price movement analysis - convert to scalars
+    price_1d_ago = stock["Close"].iloc[-2].item() if len(stock) >= 2 else current_price
+    price_1w_ago = stock["Close"].iloc[-5].item() if len(stock) >= 5 else current_price
+    price_1m_ago = stock["Close"].iloc[-21].item() if len(stock) >= 21 else current_price
     
     drop_1d = (current_price / price_1d_ago - 1)
     drop_1w = (current_price / price_1w_ago - 1)
     drop_1m = (current_price / price_1m_ago - 1)
     
-    # Find historical peak (1 year)
-    peak_price = stock["Close"].max()
+    # Find historical peak (1 year) - convert to scalars
+    peak_price = stock["Close"].max().item()
     peak_date = stock["Close"].idxmax()
     drawdown_from_peak = (current_price / peak_price - 1)
     
-    # Volume analysis
-    avg_volume = stock["Volume"].rolling(20).mean().iloc[-1]
-    current_volume = stock["Volume"].iloc[-1]
-    
-    # Convert to scalars properly
-    avg_vol_scalar = avg_volume.item() if hasattr(avg_volume, 'item') else float(avg_volume)
-    curr_vol_scalar = current_volume.item() if hasattr(current_volume, 'item') else float(current_volume)
-    volume_ratio = curr_vol_scalar / avg_vol_scalar if avg_vol_scalar > 0 else 1.0
+    # Volume analysis - convert to scalars
+    avg_volume = stock["Volume"].rolling(20).mean().iloc[-1].item()
+    current_volume = stock["Volume"].iloc[-1].item()
+    volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
     
     # Calculate if stock is at good reversion level
-    # Was it stable at peak for a while?
     peak_area = stock["Close"].iloc[-252:] if len(stock) >= 252 else stock["Close"]
-    stable_high = peak_area.quantile(0.80)  # 80th percentile as "stable level"
+    stable_high = peak_area.quantile(0.80).item()
     reversion_potential = (stable_high / current_price - 1) * 100
     
     # Signal generation
