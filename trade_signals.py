@@ -19,7 +19,11 @@ from risk_indicators import (
     debt_ceiling_stress_score,
     treasury_stress_score,
     budget_vote_risk_score,
-    days_to_debt_ceiling
+    days_to_debt_ceiling,
+    earnings_volatility_score,
+    is_earnings_season,
+    congressional_budget_risk_score,
+    get_budget_risk_details
 )
 import yfinance as yf
 import json
@@ -29,8 +33,8 @@ STATE_FILE = "trade_signal_state.json"
 SELL_COOLDOWN_DAYS = 5
 BUY_COOLDOWN_DAYS = 3
 
-# Thresholds
-SELL_THRESHOLD = 0.55  # Lowered from 0.7 to catch more crashes
+# UPDATED: Lower thresholds for more sensitivity
+SELL_THRESHOLD = 0.50  # Lowered from 0.55
 REBUY_THRESHOLD = 0.4
 PERSISTENCE_DAYS = 2
 
@@ -60,7 +64,7 @@ sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
 btc_prices   = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
 gold_prices  = yf.download("GLD", period="3mo", progress=False)["Close"]
 
-# --- Compute Indicators ---
+# --- Compute Core Indicators ---
 vol_score      = safe_float(volatility_expansion_score())
 credit_score   = safe_float(credit_stress_score())
 options_score  = safe_float(options_hedging_score())
@@ -71,44 +75,71 @@ gold_z         = safe_float(gold_z)
 btc_z          = safe_float(btc_z)
 btc_corr_score = safe_float(btc_equity_correlation(sp500_prices, btc_prices))
 
-# Additional indicators
+# --- Market Structure Indicators ---
 put_call_score    = safe_float(put_call_ratio_score())
 spread_score      = safe_float(credit_spread_score())
 breadth_sc        = safe_float(breadth_score())
 dollar_score      = safe_float(dollar_strength_score())
 curve_score       = safe_float(yield_curve_score())
 
-# NEW: Budget/debt ceiling indicators
+# --- Fiscal Risk Indicators ---
 debt_stress       = safe_float(debt_ceiling_stress_score())
 treasury_stress   = safe_float(treasury_stress_score())
 budget_risk       = safe_float(budget_vote_risk_score())
+congressional_risk = safe_float(congressional_budget_risk_score())
 
-# Get debt ceiling info
+# --- NEW: Earnings Risk ---
+earnings_risk = safe_float(earnings_volatility_score())
+is_earnings, earnings_intensity, earnings_desc = is_earnings_season()
+
+# --- Get context ---
 days_to_x, is_near_deadline = days_to_debt_ceiling()
+budget_details = get_budget_risk_details()
 
+# ======================
 # REWEIGHTED COMPOSITE
-# Based on 2011 debt ceiling crisis patterns and indicator reliability
+# ======================
+
+# Base weights (total: 100%)
 base_composite = (
-    0.15 * vol_score +          # Reduced from 20% (too many false positives)
-    0.15 * credit_score +       # Kept same (reliable)
-    0.15 * options_score +      # Kept same (reliable)
-    0.10 * spike_score +        # Kept same (good for flash crashes)
-    0.12 * put_call_score +     # Increased from 10% (more reliable than VIX)
-    0.10 * spread_score +       # Kept same (HY-IG spread is good)
-    0.10 * breadth_sc +         # Increased from 8% (important divergence signal)
-    0.05 * dollar_score +       # Reduced from 7% (less predictive)
-    0.08 * curve_score          # Increased from 5% (longer lead time, important)
+    0.15 * vol_score +         
+    0.15 * credit_score +      
+    0.15 * options_score +     
+    0.10 * spike_score +       
+    0.12 * put_call_score +    
+    0.10 * spread_score +      
+    0.10 * breadth_sc +        
+    0.05 * dollar_score +      
+    0.08 * curve_score         
 )
 
-# Add budget/debt ceiling component if near deadline
+# ======================
+# EVENT-BASED BOOSTS
+# ======================
+
+event_boost = 0.0
+
+# 1. Debt Ceiling (up to 20% boost)
 if is_near_deadline:
-    # Boost composite by up to 20% when near debt ceiling
-    budget_boost = 0.20 * budget_risk
-    base_composite = min(base_composite + budget_boost, 1.0)
+    debt_boost = 0.20 * budget_risk
+    event_boost += debt_boost
+
+# 2. Congressional Budget Issues (up to 15% boost)
+if congressional_risk > 0.4:
+    congress_boost = 0.15 * congressional_risk
+    event_boost += congress_boost
+
+# 3. Earnings Season (up to 10% boost)
+if is_earnings and earnings_risk > 0.3:
+    earnings_boost = 0.10 * earnings_risk
+    event_boost += earnings_boost
+
+# Apply event boosts (cap total composite at 1.0)
+base_composite = min(base_composite + event_boost, 1.0)
 
 # Track history
 recent_scores.append(base_composite)
-recent_scores = recent_scores[-20:]  # Keep 20 days
+recent_scores = recent_scores[-20:]
 
 # Acceleration
 accel_score = safe_float(risk_acceleration_score(recent_scores))
@@ -118,17 +149,22 @@ composite = min(max(base_composite + 0.15 * accel_score, 0.0), 1.0)
 
 composite_pct = int(composite * 100)
 
-# --- Decision Logic ---
+# ======================
+# DECISION LOGIC
+# ======================
+
 signal = "HOLD"
 reason = ""
 
-# SELL CONDITIONS (any trigger)
-drawdown_alert = check_drawdown()
-vix_spike_alert = spike_score > 0.7  # Flash crash
+# --- SELL CONDITIONS ---
+drawdown_alert = check_drawdown()  # NOW: -2% in 2 days OR -5% in 10 days
+vix_spike_alert = spike_score > 0.7
 persistent_high_risk = get_persistent_risk(recent_scores, SELL_THRESHOLD, PERSISTENCE_DAYS)
 
-# NEW: Debt ceiling emergency
+# Emergency conditions
 debt_ceiling_emergency = is_near_deadline and days_to_x <= 14 and budget_risk > 0.6
+congressional_emergency = congressional_risk > 0.7  # Shutdown imminent
+earnings_crash = is_earnings and earnings_risk > 0.75 and composite > 0.60
 
 if debt_ceiling_emergency:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
@@ -138,10 +174,18 @@ if debt_ceiling_emergency:
         signal = "HOLD (sell cooldown)"
         reason = f"Debt ceiling risk but in cooldown ({days_to_x} days to X-date)"
 
+elif congressional_emergency:
+    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+        signal = "SELL"
+        reason = f"Congressional budget crisis - {budget_details}"
+    else:
+        signal = "HOLD (sell cooldown)"
+        reason = f"Budget crisis but in cooldown"
+
 elif drawdown_alert:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
-        reason = "Drawdown circuit breaker triggered"
+        reason = "Drawdown circuit breaker triggered (-2% in 2d or -5% in 10d)"
     else:
         signal = "HOLD (sell cooldown)"
         reason = "Drawdown detected but in cooldown"
@@ -153,6 +197,14 @@ elif vix_spike_alert:
     else:
         signal = "HOLD (sell cooldown)"
         reason = "VIX spike but in cooldown"
+
+elif earnings_crash:
+    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+        signal = "SELL"
+        reason = f"{earnings_desc} volatility spike - composite {composite_pct}%"
+    else:
+        signal = "HOLD (sell cooldown)"
+        reason = f"Earnings volatility but in cooldown"
         
 elif composite > SELL_THRESHOLD and persistent_high_risk:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
@@ -162,7 +214,7 @@ elif composite > SELL_THRESHOLD and persistent_high_risk:
         signal = "HOLD (sell cooldown)"
         reason = "High risk but in cooldown"
 
-# REBUY CONDITIONS (recovery + low composite)
+# --- REBUY CONDITIONS ---
 elif composite < REBUY_THRESHOLD and check_recovery():
     if not in_cooldown(state, "REBUY", BUY_COOLDOWN_DAYS):
         signal = "REBUY"
@@ -172,12 +224,22 @@ elif composite < REBUY_THRESHOLD and check_recovery():
         reason = "Recovery detected but in cooldown"
 
 else:
+    # Build context-aware reason
+    context_parts = []
     if is_near_deadline:
-        reason = f"Composite {composite_pct}%, debt ceiling in {days_to_x} days - monitoring"
-    else:
-        reason = f"Composite {composite_pct}%, no clear signal"
+        context_parts.append(f"debt ceiling {days_to_x}d")
+    if congressional_risk > 0.4:
+        context_parts.append("budget issues")
+    if is_earnings:
+        context_parts.append(earnings_desc)
+    
+    context_str = ", ".join(context_parts) if context_parts else "monitoring"
+    reason = f"Composite {composite_pct}% - {context_str}"
 
-# --- Update and Save State ---
+# ======================
+# UPDATE STATE
+# ======================
+
 if signal in ["SELL", "REBUY"]:
     state["last_action"] = signal
     state["last_action_time"] = datetime.now(timezone.utc).isoformat()
@@ -199,17 +261,26 @@ state.update({
     "debt_stress": round(debt_stress, 2),
     "treasury_stress": round(treasury_stress, 2),
     "budget_risk": round(budget_risk, 2),
+    "congressional_risk": round(congressional_risk, 2),
+    "earnings_risk": round(earnings_risk, 2),
     "accel_score": round(accel_score, 2),
     "drawdown_alert": bool(drawdown_alert),
     "vix_spike_alert": bool(vix_spike_alert),
     "debt_ceiling_alert": bool(debt_ceiling_emergency),
-    "days_to_debt_ceiling": int(days_to_x)
+    "congressional_alert": bool(congressional_emergency),
+    "earnings_alert": bool(is_earnings),
+    "days_to_debt_ceiling": int(days_to_x),
+    "budget_details": budget_details,
+    "earnings_details": earnings_desc if is_earnings else "No earnings"
 })
 
 with open(STATE_FILE, "w") as f:
     json.dump(state, f, indent=4)
 
-# --- Console Output ---
+# ======================
+# CONSOLE OUTPUT
+# ======================
+
 print(f"Composite: {composite_pct}/100 | Signal: {signal}")
 print(f"Reason: {reason}")
 print(f"Drawdown Alert: {drawdown_alert} | VIX Spike: {vix_spike_alert}")
@@ -217,9 +288,16 @@ print(f"Drawdown Alert: {drawdown_alert} | VIX Spike: {vix_spike_alert}")
 if is_near_deadline:
     print(f"⚠️ DEBT CEILING: {days_to_x} days to X-date | Budget risk: {budget_risk:.2f}")
 
+if congressional_risk > 0.4:
+    print(f"⚠️ BUDGET: {budget_details} | Risk: {congressional_risk:.2f}")
+
+if is_earnings:
+    print(f"📊 EARNINGS: {earnings_desc} | Risk: {earnings_risk:.2f}")
+
 print(f"Core: Vol={vol_score:.2f} Credit={credit_score:.2f} Options={options_score:.2f} Spike={spike_score:.2f}")
 print(f"Market: PutCall={put_call_score:.2f} Spread={spread_score:.2f} Breadth={breadth_sc:.2f}")
 print(f"Macro: Dollar={dollar_score:.2f} Curve={curve_score:.2f}")
-print(f"Fiscal: DebtStress={debt_stress:.2f} TreasuryStress={treasury_stress:.2f} BudgetRisk={budget_risk:.2f}")
+print(f"Fiscal: DebtStress={debt_stress:.2f} TreasuryStress={treasury_stress:.2f} Congressional={congressional_risk:.2f}")
+print(f"Events: Earnings={earnings_risk:.2f}")
 print(f"Cross-asset: Gold Z={gold_z:.2f} BTC Z={btc_z:.2f}")
 print(f"Acceleration: {accel_score:.2f}")
