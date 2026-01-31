@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install dependencies
-        run: pip install yfinance pandas numpy matplotlib scipy
+        run: pip install -r requirements.txt --break-system-packages
       - name: Run trade signals
         env:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
