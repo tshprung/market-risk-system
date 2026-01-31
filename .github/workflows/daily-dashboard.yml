@@ -1,8 +1,12 @@
 name: Daily Market Dashboard
 on:
   schedule:
-    - cron: "30 13 * * 1-5"   # 8:30 AM ET, before market open
+    # Pre-market analysis: 6:00 AM ET (11:00 UTC) - gives you time before 9:30 open
+    - cron: "0 11 * * 1-5"
+    # Mid-day check: 12:00 PM ET (17:00 UTC) - reassess if conditions changed
+    - cron: "0 17 * * 1-5"
   workflow_dispatch:
+
 jobs:
   daily-dashboard:
     runs-on: ubuntu-latest
@@ -29,5 +33,5 @@ jobs:
           git config user.email "bot@market-risk"
           git pull --rebase || true
           git add trade_signal_state.json yesterday_state.json || true
-          git commit -m "Daily dashboard update" || echo "No changes"
+          git commit -m "Daily dashboard update $(date -u +%Y-%m-%d_%H:%M)" || echo "No changes"
           git push || echo "Push failed, state not saved"
