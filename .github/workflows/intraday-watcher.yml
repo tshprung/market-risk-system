@@ -35,6 +35,8 @@ jobs:
       - name: Run intraday watcher
         env:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
         run: python intraday_emergency_watcher.py
       - name: Commit state
         run: |
