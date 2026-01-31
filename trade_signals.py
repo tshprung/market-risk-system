@@ -90,6 +90,10 @@ treasury_stress   = safe_float(treasury_stress_score())
 budget_risk       = safe_float(budget_vote_risk_score())
 congressional_risk = safe_float(congressional_budget_risk_score())
 
+# --- NEW: Earnings Risk (MUST BE BEFORE EVENT BOOSTS) ---
+earnings_risk = safe_float(earnings_volatility_score())
+is_earnings, earnings_intensity, earnings_desc = is_earnings_season()
+
 # --- NEW: News Risk ---
 news_risk, news_severity, news_events, news_reasoning, used_ai = news_sentiment_score()
 news_risk = safe_float(news_risk)
