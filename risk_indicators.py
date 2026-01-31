@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import percentileofscore
 from typing import List
+from datetime import datetime, timedelta
 
 # ======================
 # DATA HELPERS
@@ -27,7 +28,10 @@ def zscore(series, window=60):
     std = series[-window:].std()
     if std == 0 or np.isnan(std):
         return 0.0
-    return (series.iloc[-1] - mean) / std
+    last_val = series.iloc[-1]
+    if isinstance(last_val, pd.Series):
+        last_val = last_val.item()
+    return (last_val - mean) / std
 
 def normalize_z(z, cap=3.0):
     return min(max(abs(z) / cap, 0.0), 1.0)
@@ -71,6 +75,8 @@ def credit_complacency_score(window: int = 120):
         return 0.0
 
     latest_std = rolling_std.iloc[-1]
+    if isinstance(latest_std, pd.Series):
+        latest_std = latest_std.item()
     mean_std = rolling_std.mean()
     std_std = rolling_std.std()
     if std_std == 0 or np.isnan(std_std):
@@ -137,6 +143,8 @@ def options_percentile():
         return None
 
     current = spread.iloc[-1]
+    if isinstance(current, pd.Series):
+        current = current.item()
     return int(percentileofscore(spread, current))
 
 def credit_stress_score():
@@ -235,13 +243,15 @@ def btc_equity_correlation(sp500_prices: pd.Series, btc_prices: pd.Series, windo
 
     rolling_corr = sp_ret.rolling(window).corr(btc_ret)
 
-    corr = rolling_corr.dropna().iloc[-1] if not rolling_corr.dropna().empty else 0.0
+    corr_val = rolling_corr.dropna().iloc[-1] if not rolling_corr.dropna().empty else 0.0
+    if isinstance(corr_val, pd.Series):
+        corr_val = corr_val.item()
 
-    score = min(max(-corr, 0.0), 1.0)
+    score = min(max(-corr_val, 0.0), 1.0)
     return float(score)
 
 # ======================
-# NEW: DRAWDOWN & RECOVERY
+# DRAWDOWN & RECOVERY
 # ======================
 
 def check_drawdown(ticker="SPY", short_days=3, short_thresh=-0.05, long_days=20, long_thresh=-0.10):
@@ -272,8 +282,17 @@ def check_recovery(vix_thresh=0.85, credit_thresh=-0.02, vix_days=5, credit_days
     if len(vix) < vix_days or len(hyg) < credit_days:
         return False
     
-    vix_falling = vix.iloc[-1] < vix[-vix_days:].mean() * vix_thresh
-    credit_stable = hyg.pct_change(credit_days).iloc[-1] > credit_thresh
+    vix_avg = vix[-vix_days:].mean()
+    vix_last = vix.iloc[-1]
+    if isinstance(vix_last, pd.Series):
+        vix_last = vix_last.item()
+    
+    vix_falling = vix_last < vix_avg * vix_thresh
+    
+    hyg_change = hyg.pct_change(credit_days).iloc[-1]
+    if isinstance(hyg_change, pd.Series):
+        hyg_change = hyg_change.item()
+    credit_stable = hyg_change > credit_thresh
     
     return vix_falling and credit_stable
 
@@ -305,7 +324,7 @@ def vix_spike_score():
     return min(max(max_spike / 0.30, 0.0), 1.0)
 
 # ======================
-# NEW INDICATORS
+# ADDITIONAL INDICATORS
 # ======================
 
 def put_call_ratio_score(window: int = 60):
@@ -386,3 +405,97 @@ def yield_curve_score(window: int = 120):
     spread = ief.pct_change() - sho.pct_change()
     z = zscore(spread.dropna(), window)
     return normalize_z(-z)  # Negative spread = high score
+
+# ======================
+# NEW: DEBT CEILING & TREASURY STRESS
+# ======================
+
+def debt_ceiling_stress_score():
+    """
+    Detects stress in short-term Treasury markets (1-month bills).
+    High score = market pricing debt ceiling risk.
+    Uses 1-month Treasury yield spike vs 3-month.
+    """
+    # Use TBT (2x short 20yr) as proxy for long-term rates
+    # Use BIL (1-3 month Treasury) for short-term
+    bil = get_close_series("BIL", "6mo")  # 1-3 month bills
+    shy = get_close_series("SHY", "6mo")  # 1-3 year
+    
+    if bil.empty or shy.empty:
+        return 0.0
+    
+    # When BIL underperforms SHY = short-term stress
+    spread = shy.pct_change() - bil.pct_change()
+    z = zscore(spread.dropna(), 60)
+    return normalize_z(z)
+
+def treasury_stress_score(window: int = 60):
+    """
+    Monitors short-term Treasury volatility.
+    High score = unusual moves in "risk-free" assets = systemic stress.
+    """
+    shy = get_close_series("SHY", "6mo")  # 1-3yr Treasury
+    if shy.empty or len(shy) < window:
+        return 0.0
+    
+    # Measure volatility of returns
+    returns = shy.pct_change().dropna()
+    rolling_vol = returns.rolling(20).std().dropna()
+    
+    if rolling_vol.empty:
+        return 0.0
+    
+    current_vol = rolling_vol.iloc[-1]
+    if isinstance(current_vol, pd.Series):
+        current_vol = current_vol.item()
+    
+    z = zscore(rolling_vol, window)
+    return normalize_z(z)
+
+def days_to_debt_ceiling():
+    """
+    Estimates days until debt ceiling X-date.
+    Returns (days_remaining, is_near_deadline)
+    
+    Based on CBO estimate: August-September 2026
+    """
+    today = datetime.now()
+    
+    # Conservative estimate: August 1, 2026
+    x_date = datetime(2026, 8, 1)
+    
+    days = (x_date - today).days
+    
+    # Flag if within 60 days (2 months - when market typically reacts)
+    is_near = days <= 60
+    
+    return days, is_near
+
+def budget_vote_risk_score():
+    """
+    Combines debt ceiling proximity with Treasury stress.
+    High score when:
+    - Within 60 days of debt ceiling
+    - Treasury markets showing stress
+    - VIX elevated
+    """
+    days, is_near = days_to_debt_ceiling()
+    
+    if not is_near:
+        return 0.0
+    
+    # Score increases as deadline approaches
+    time_score = min((60 - days) / 60, 1.0)
+    
+    # Add Treasury stress
+    treasury_stress = treasury_stress_score()
+    debt_stress = debt_ceiling_stress_score()
+    
+    # Combined score
+    combined = (
+        0.4 * time_score +
+        0.3 * treasury_stress +
+        0.3 * debt_stress
+    )
+    
+    return min(combined, 1.0)
