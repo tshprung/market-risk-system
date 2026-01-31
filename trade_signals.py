@@ -15,7 +15,11 @@ from risk_indicators import (
     credit_spread_score,
     breadth_score,
     dollar_strength_score,
-    yield_curve_score
+    yield_curve_score,
+    debt_ceiling_stress_score,
+    treasury_stress_score,
+    budget_vote_risk_score,
+    days_to_debt_ceiling
 )
 import yfinance as yf
 import json
@@ -45,70 +49,72 @@ def in_cooldown(state, action, days):
     last = datetime.fromisoformat(state["last_action_time"])
     return datetime.now(timezone.utc) < last + timedelta(days=days)
 
+def safe_float(value):
+    """Convert to float and handle None/NaN"""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return 0.0
+    return float(value)
+
 # --- Fetch Prices ---
 sp500_prices = yf.download("^GSPC", period="3mo", progress=False)["Close"]
 btc_prices   = yf.download("BTC-USD", period="3mo", progress=False)["Close"]
 gold_prices  = yf.download("GLD", period="3mo", progress=False)["Close"]
 
 # --- Compute Indicators ---
-vol_score      = volatility_expansion_score()
-credit_score   = credit_stress_score()
-options_score  = options_hedging_score()
-spike_score    = vix_spike_score()
+vol_score      = safe_float(volatility_expansion_score())
+credit_score   = safe_float(credit_stress_score())
+options_score  = safe_float(options_hedging_score())
+spike_score    = safe_float(vix_spike_score())
 cross_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
-btc_corr_score = btc_equity_correlation(sp500_prices, btc_prices)
+cross_score    = safe_float(cross_score)
+gold_z         = safe_float(gold_z)
+btc_z          = safe_float(btc_z)
+btc_corr_score = safe_float(btc_equity_correlation(sp500_prices, btc_prices))
 
-# New indicators
-put_call_score = put_call_ratio_score()
-spread_score   = credit_spread_score()
-breadth_sc     = breadth_score()
-dollar_score   = dollar_strength_score()
-curve_score    = yield_curve_score()
+# Additional indicators
+put_call_score    = safe_float(put_call_ratio_score())
+spread_score      = safe_float(credit_spread_score())
+breadth_sc        = safe_float(breadth_score())
+dollar_score      = safe_float(dollar_strength_score())
+curve_score       = safe_float(yield_curve_score())
 
-# Ensure all scores are valid numbers
-for score_var in [vol_score, credit_score, options_score, spike_score, cross_score, 
-                  btc_corr_score, put_call_score, spread_score, breadth_sc, dollar_score, curve_score]:
-    if score_var is None or np.isnan(score_var):
-        score_var = 0.0
+# NEW: Budget/debt ceiling indicators
+debt_stress       = safe_float(debt_ceiling_stress_score())
+treasury_stress   = safe_float(treasury_stress_score())
+budget_risk       = safe_float(budget_vote_risk_score())
 
-vol_score = 0.0 if vol_score is None or np.isnan(vol_score) else vol_score
-credit_score = 0.0 if credit_score is None or np.isnan(credit_score) else credit_score
-options_score = 0.0 if options_score is None or np.isnan(options_score) else options_score
-spike_score = 0.0 if spike_score is None or np.isnan(spike_score) else spike_score
-cross_score = 0.0 if cross_score is None or np.isnan(cross_score) else cross_score
-btc_corr_score = 0.0 if btc_corr_score is None or np.isnan(btc_corr_score) else btc_corr_score
-put_call_score = 0.0 if put_call_score is None or np.isnan(put_call_score) else put_call_score
-spread_score = 0.0 if spread_score is None or np.isnan(spread_score) else spread_score
-breadth_sc = 0.0 if breadth_sc is None or np.isnan(breadth_sc) else breadth_sc
-dollar_score = 0.0 if dollar_score is None or np.isnan(dollar_score) else dollar_score
-curve_score = 0.0 if curve_score is None or np.isnan(curve_score) else curve_score
+# Get debt ceiling info
+days_to_x, is_near_deadline = days_to_debt_ceiling()
 
-# Composite (before acceleration)
+# REWEIGHTED COMPOSITE
+# Based on 2011 debt ceiling crisis patterns and indicator reliability
 base_composite = (
-    0.20 * vol_score + 
-    0.15 * credit_score + 
-    0.15 * options_score +
-    0.10 * spike_score +
-    0.10 * put_call_score +   # NEW
-    0.10 * spread_score +     # NEW
-    0.08 * breadth_sc +       # NEW
-    0.07 * dollar_score +     # NEW
-    0.05 * curve_score        # NEW (longer lead time, lower weight)
+    0.15 * vol_score +          # Reduced from 20% (too many false positives)
+    0.15 * credit_score +       # Kept same (reliable)
+    0.15 * options_score +      # Kept same (reliable)
+    0.10 * spike_score +        # Kept same (good for flash crashes)
+    0.12 * put_call_score +     # Increased from 10% (more reliable than VIX)
+    0.10 * spread_score +       # Kept same (HY-IG spread is good)
+    0.10 * breadth_sc +         # Increased from 8% (important divergence signal)
+    0.05 * dollar_score +       # Reduced from 7% (less predictive)
+    0.08 * curve_score          # Increased from 5% (longer lead time, important)
 )
+
+# Add budget/debt ceiling component if near deadline
+if is_near_deadline:
+    # Boost composite by up to 20% when near debt ceiling
+    budget_boost = 0.20 * budget_risk
+    base_composite = min(base_composite + budget_boost, 1.0)
 
 # Track history
 recent_scores.append(base_composite)
 recent_scores = recent_scores[-20:]  # Keep 20 days
 
 # Acceleration
-accel_score = risk_acceleration_score(recent_scores)
+accel_score = safe_float(risk_acceleration_score(recent_scores))
 
 # Final composite with acceleration boost
 composite = min(max(base_composite + 0.15 * accel_score, 0.0), 1.0)
-
-# Handle NaN
-if np.isnan(composite):
-    composite = 0.0
 
 composite_pct = int(composite * 100)
 
@@ -121,7 +127,18 @@ drawdown_alert = check_drawdown()
 vix_spike_alert = spike_score > 0.7  # Flash crash
 persistent_high_risk = get_persistent_risk(recent_scores, SELL_THRESHOLD, PERSISTENCE_DAYS)
 
-if drawdown_alert:
+# NEW: Debt ceiling emergency
+debt_ceiling_emergency = is_near_deadline and days_to_x <= 14 and budget_risk > 0.6
+
+if debt_ceiling_emergency:
+    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+        signal = "SELL"
+        reason = f"Debt ceiling deadline in {days_to_x} days, Treasury stress elevated"
+    else:
+        signal = "HOLD (sell cooldown)"
+        reason = f"Debt ceiling risk but in cooldown ({days_to_x} days to X-date)"
+
+elif drawdown_alert:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = "Drawdown circuit breaker triggered"
@@ -155,7 +172,10 @@ elif composite < REBUY_THRESHOLD and check_recovery():
         reason = "Recovery detected but in cooldown"
 
 else:
-    reason = f"Composite {composite_pct}%, no clear signal"
+    if is_near_deadline:
+        reason = f"Composite {composite_pct}%, debt ceiling in {days_to_x} days - monitoring"
+    else:
+        reason = f"Composite {composite_pct}%, no clear signal"
 
 # --- Update and Save State ---
 if signal in ["SELL", "REBUY"]:
@@ -176,9 +196,14 @@ state.update({
     "breadth_score": round(breadth_sc, 2),
     "dollar_score": round(dollar_score, 2),
     "curve_score": round(curve_score, 2),
+    "debt_stress": round(debt_stress, 2),
+    "treasury_stress": round(treasury_stress, 2),
+    "budget_risk": round(budget_risk, 2),
     "accel_score": round(accel_score, 2),
     "drawdown_alert": bool(drawdown_alert),
-    "vix_spike_alert": bool(vix_spike_alert)
+    "vix_spike_alert": bool(vix_spike_alert),
+    "debt_ceiling_alert": bool(debt_ceiling_emergency),
+    "days_to_debt_ceiling": int(days_to_x)
 })
 
 with open(STATE_FILE, "w") as f:
@@ -188,7 +213,13 @@ with open(STATE_FILE, "w") as f:
 print(f"Composite: {composite_pct}/100 | Signal: {signal}")
 print(f"Reason: {reason}")
 print(f"Drawdown Alert: {drawdown_alert} | VIX Spike: {vix_spike_alert}")
+
+if is_near_deadline:
+    print(f"⚠️ DEBT CEILING: {days_to_x} days to X-date | Budget risk: {budget_risk:.2f}")
+
 print(f"Core: Vol={vol_score:.2f} Credit={credit_score:.2f} Options={options_score:.2f} Spike={spike_score:.2f}")
-print(f"New: PutCall={put_call_score:.2f} Spread={spread_score:.2f} Breadth={breadth_sc:.2f} Dollar={dollar_score:.2f} Curve={curve_score:.2f}")
+print(f"Market: PutCall={put_call_score:.2f} Spread={spread_score:.2f} Breadth={breadth_sc:.2f}")
+print(f"Macro: Dollar={dollar_score:.2f} Curve={curve_score:.2f}")
+print(f"Fiscal: DebtStress={debt_stress:.2f} TreasuryStress={treasury_stress:.2f} BudgetRisk={budget_risk:.2f}")
 print(f"Cross-asset: Gold Z={gold_z:.2f} BTC Z={btc_z:.2f}")
 print(f"Acceleration: {accel_score:.2f}")
