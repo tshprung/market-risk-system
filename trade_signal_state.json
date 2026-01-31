@@ -3,8 +3,6 @@
     "last_action": null,
     "last_action_time": null,
     "recent_scores": [
-        0.12394042345949129,
-        0.12376654309518637,
         0.12394032523942529,
         0.12411378036344668,
         0.12463441339974893,
@@ -22,10 +20,12 @@
         0.15152151396323926,
         0.15157746759764812,
         0.2063882569449461,
-        0.20638849456279243
+        0.20638849456279243,
+        0.19421871848408595,
+        0.19421873657173983
     ],
-    "composite_pct": 25,
-    "reason": "Composite 25% - monitoring",
+    "composite_pct": 24,
+    "reason": "Composite 24% - monitoring",
     "vol_score": 0.17,
     "credit_score": 0.21,
     "options_score": 0.05,
@@ -48,5 +48,11 @@
     "earnings_alert": false,
     "days_to_debt_ceiling": 181,
     "budget_details": "No major fiscal deadlines",
-    "earnings_details": "No earnings"
+    "earnings_details": "No earnings",
+    "news_risk": 0.0,
+    "news_severity": "NO_DATA",
+    "news_events": [],
+    "used_ai": false,
+    "news_crisis_alert": false,
+    "news_details": "No news data available"
 }
