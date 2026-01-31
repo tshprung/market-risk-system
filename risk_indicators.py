@@ -424,3 +424,252 @@ def get_budget_risk_details():
     if not details:
         details.append("No major fiscal deadlines")
     return " | ".join(details)
+
+# ======================
+# NEW: NEWS SENTIMENT ANALYSIS
+# ======================
+
+import os
+import requests
+import json
+
+NEWS_API_KEY = os.getenv("NEWSAPI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+def fetch_financial_headlines(hours=24):
+    """
+    Fetch recent financial news headlines from NewsAPI.
+    Returns list of headline strings.
+    """
+    try:
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "apiKey": NEWS_API_KEY,
+            "q": "stock market OR economy OR Fed OR recession OR crisis",
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": 50,
+            "domains": "reuters.com,bloomberg.com,cnbc.com,wsj.com,ft.com"
+        }
+        
+        # Calculate time window
+        from_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+        params["from"] = from_time
+        
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            articles = response.json().get("articles", [])
+            headlines = [a["title"] for a in articles if a.get("title")]
+            return headlines[:30]  # Limit to 30 most recent
+        else:
+            print(f"NewsAPI error: {response.status_code}")
+            return []
+            
+    except Exception as e:
+        print(f"Error fetching news: {e}")
+        return []
+
+def keyword_crisis_detection(headlines):
+    """
+    Fast keyword-based crisis detection.
+    Returns (max_risk_score, detected_events)
+    """
+    # TIER 1: Immediate Crisis (0.8-1.0)
+    tier1_keywords = {
+        "bank failure": 0.95,
+        "bank run": 0.90,
+        "FDIC takeover": 0.95,
+        "liquidity crisis": 0.85,
+        "systemic risk": 0.85,
+        "debt default": 0.95,
+        "government default": 0.95,
+        "nuclear threat": 0.90,
+        "nuclear strike": 0.95,
+        "trading halt": 0.85,
+        "circuit breaker": 0.80,
+        "market suspended": 0.90,
+        "flash crash": 0.75,
+    }
+    
+    # TIER 2: High Concern (0.5-0.7)
+    tier2_keywords = {
+        "emergency rate hike": 0.70,
+        "emergency meeting": 0.65,
+        "Fed emergency": 0.70,
+        "bankruptcy": 0.55,  # Only if major company
+        "recession confirmed": 0.65,
+        "GDP negative": 0.60,
+        "unemployment spike": 0.60,
+        "credit downgrade": 0.60,
+        "housing crash": 0.65,
+        "mortgage crisis": 0.70,
+    }
+    
+    # TIER 3: Moderate Watch (0.3-0.4)
+    tier3_keywords = {
+        "earnings miss": 0.35,
+        "guidance cut": 0.35,
+        "sell-off": 0.35,
+        "correction territory": 0.40,
+        "VIX spike": 0.35,
+        "tariffs": 0.35,
+        "trade war": 0.40,
+    }
+    
+    # FALSE POSITIVES to filter
+    ignore_patterns = [
+        "crypto", "bitcoin", "elon musk", "analyst predicts",
+        "could crash", "may crash", "like 2008", "reminds of"
+    ]
+    
+    max_risk = 0.0
+    detected_events = []
+    
+    for headline in headlines:
+        headline_lower = headline.lower()
+        
+        # Skip false positives
+        if any(ignore in headline_lower for ignore in ignore_patterns):
+            continue
+        
+        # Check all tiers
+        all_keywords = {**tier1_keywords, **tier2_keywords, **tier3_keywords}
+        
+        for keyword, risk_score in all_keywords.items():
+            if keyword in headline_lower:
+                if risk_score > max_risk:
+                    max_risk = risk_score
+                detected_events.append(f"{keyword} ({risk_score:.0%})")
+    
+    return max_risk, detected_events
+
+def openai_sentiment_analysis(headlines):
+    """
+    Use OpenAI GPT-4o-mini to analyze headlines.
+    Returns (risk_score 0-1, severity, events, reasoning)
+    """
+    if not OPENAI_API_KEY or not headlines:
+        return 0.0, "UNKNOWN", [], "No API key or headlines"
+    
+    try:
+        # Combine headlines
+        headlines_text = "\n".join([f"- {h}" for h in headlines[:20]])
+        
+        prompt = f"""You are a financial risk analyst. Analyze these headlines from the past 24 hours and rate systemic market risk 0-100.
+
+Headlines:
+{headlines_text}
+
+CRITICAL (80-100): Bank failures, war with major powers, debt default, trading halts, systemic banking crisis
+HIGH (50-70): Fed emergency actions, Fortune 500 bankruptcies, recession confirmed, major geopolitical events
+MODERATE (30-50): Policy changes, tech earnings misses, volatility spikes, tariff announcements
+LOW (0-30): Normal market movement, analyst opinions, minor news
+
+IGNORE: Crypto drama, Elon Musk tweets, analyst predictions, historical comparisons ("like 2008")
+
+Return ONLY valid JSON:
+{{
+  "risk_score": <0-100>,
+  "severity": "<CRITICAL|HIGH|MODERATE|LOW>",
+  "key_events": ["event1", "event2"],
+  "reasoning": "brief explanation"
+}}"""
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 300
+            },
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            
+            # Parse JSON response
+            parsed = json.loads(content)
+            
+            risk_score = float(parsed.get("risk_score", 0)) / 100.0  # Convert to 0-1
+            severity = parsed.get("severity", "LOW")
+            events = parsed.get("key_events", [])
+            reasoning = parsed.get("reasoning", "")
+            
+            return risk_score, severity, events, reasoning
+        else:
+            print(f"OpenAI API error: {response.status_code}")
+            return 0.0, "ERROR", [], f"API error {response.status_code}"
+            
+    except json.JSONDecodeError as e:
+        print(f"JSON parse error: {e}")
+        return 0.0, "ERROR", [], "Failed to parse response"
+    except Exception as e:
+        print(f"OpenAI analysis error: {e}")
+        return 0.0, "ERROR", [], str(e)
+
+def news_sentiment_score():
+    """
+    HYBRID: Fast keyword detection + OpenAI analysis when needed.
+    Returns (risk_score 0-1, severity, events, reasoning, used_ai)
+    """
+    # Fetch headlines
+    headlines = fetch_financial_headlines(hours=24)
+    
+    if not headlines:
+        return 0.0, "NO_DATA", [], "No headlines available", False
+    
+    # STEP 1: Fast keyword detection
+    keyword_risk, keyword_events = keyword_crisis_detection(headlines)
+    
+    # STEP 2: Decide if we need AI analysis
+    # Use AI if:
+    # - Keywords detected crisis (>0.5) → Need confirmation
+    # - OR need deeper analysis
+    
+    if keyword_risk >= 0.5 or len(headlines) > 10:
+        # High risk detected OR enough news volume → use AI
+        ai_risk, severity, ai_events, reasoning = openai_sentiment_analysis(headlines)
+        
+        # Combine keyword + AI (take max for safety)
+        final_risk = max(keyword_risk, ai_risk)
+        
+        # Merge events
+        all_events = list(set(keyword_events + ai_events))
+        
+        return final_risk, severity, all_events, reasoning, True
+    else:
+        # Low risk, keyword detection sufficient
+        severity = "LOW" if keyword_risk < 0.3 else "MODERATE"
+        reasoning = "Keyword analysis - no major concerns"
+        
+        return keyword_risk, severity, keyword_events, reasoning, False
+
+def get_news_risk_details():
+    """Human-readable news summary"""
+    risk, severity, events, reasoning, used_ai = news_sentiment_score()
+    
+    if severity == "NO_DATA":
+        return "No news data available"
+    
+    details = []
+    details.append(f"{severity} ({int(risk*100)}%)")
+    
+    if events:
+        top_events = events[:3]  # Show top 3
+        details.append(f"Events: {', '.join(top_events)}")
+    
+    if reasoning and len(reasoning) < 100:
+        details.append(reasoning)
+    
+    method = "AI-analyzed" if used_ai else "Keyword-scanned"
+    details.append(f"[{method}]")
+    
+    return " | ".join(details)
