@@ -438,36 +438,75 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 def fetch_financial_headlines(hours=24):
     """
-    Fetch recent financial news headlines from NewsAPI.
-    Returns list of headline strings.
+    Fetch recent financial news headlines.
+    Primary: NewsAPI (if working)
+    Fallback: Yahoo Finance RSS (free, no key)
     """
+    # Try NewsAPI first (if key provided)
+    if NEWS_API_KEY:
+        try:
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                "apiKey": NEWS_API_KEY,
+                "q": "stock market OR economy OR Fed OR recession OR crisis",
+                "language": "en",
+                "sortBy": "publishedAt",
+                "pageSize": 50,
+                "domains": "reuters.com,bloomberg.com,cnbc.com,wsj.com,ft.com"
+            }
+            
+            from_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+            params["from"] = from_time
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                articles = response.json().get("articles", [])
+                headlines = [a["title"] for a in articles if a.get("title")]
+                if headlines:
+                    print(f"Fetched {len(headlines)} headlines from NewsAPI")
+                    return headlines[:30]
+            elif response.status_code == 401:
+                print(f"NewsAPI auth failed - using Yahoo Finance RSS")
+            else:
+                print(f"NewsAPI error {response.status_code} - using Yahoo Finance RSS")
+                
+        except Exception as e:
+            print(f"NewsAPI error: {e} - using Yahoo Finance RSS")
+    
+    # Fallback: Yahoo Finance RSS (always free)
     try:
-        url = "https://newsapi.org/v2/everything"
-        params = {
-            "apiKey": NEWS_API_KEY,
-            "q": "stock market OR economy OR Fed OR recession OR crisis",
-            "language": "en",
-            "sortBy": "publishedAt",
-            "pageSize": 50,
-            "domains": "reuters.com,bloomberg.com,cnbc.com,wsj.com,ft.com"
-        }
+        import xml.etree.ElementTree as ET
         
-        # Calculate time window
-        from_time = (datetime.now() - timedelta(hours=hours)).isoformat()
-        params["from"] = from_time
+        # Try multiple Yahoo RSS feeds
+        rss_urls = [
+            "https://finance.yahoo.com/news/rssindex",
+            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US"
+        ]
         
-        response = requests.get(url, params=params, timeout=10)
+        all_headlines = []
+        for rss_url in rss_urls:
+            try:
+                response = requests.get(rss_url, timeout=10)
+                if response.status_code == 200:
+                    root = ET.fromstring(response.content)
+                    # Handle both standard RSS and Yahoo format
+                    for item in root.findall('.//item')[:20]:
+                        title = item.find('title')
+                        if title is not None and title.text:
+                            all_headlines.append(title.text)
+            except:
+                continue
         
-        if response.status_code == 200:
-            articles = response.json().get("articles", [])
-            headlines = [a["title"] for a in articles if a.get("title")]
-            return headlines[:30]  # Limit to 30 most recent
+        if all_headlines:
+            print(f"Fetched {len(all_headlines)} headlines from Yahoo Finance RSS")
+            return all_headlines[:30]
         else:
-            print(f"NewsAPI error: {response.status_code}")
+            print("No headlines from any source - news analysis disabled")
             return []
             
     except Exception as e:
-        print(f"Error fetching news: {e}")
+        print(f"Yahoo Finance RSS error: {e} - news analysis disabled")
         return []
 
 def keyword_crisis_detection(headlines):
