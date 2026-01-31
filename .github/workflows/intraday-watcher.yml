@@ -1,8 +1,26 @@
 name: Intraday Emergency Watcher
 on:
   schedule:
-    - cron: "*/30 13-21 * * 1-5"   # Every 30 min, 9:30am-4pm ET
+    # Market open: 9:30-10:00 AM ET - check for overnight changes
+    - cron: "30 13 * * 1-5"   # 9:30 AM ET
+    - cron: "45 13 * * 1-5"   # 9:45 AM ET
+    
+    # Mid-morning: 10:30 AM ET - after initial volatility
+    - cron: "30 14 * * 1-5"
+    
+    # Lunch hour: 12:00 PM ET - mid-day assessment
+    - cron: "0 16 * * 1-5"
+    
+    # Afternoon: 1:30 PM, 2:30 PM, 3:00 PM ET - critical selling periods
+    - cron: "30 17 * * 1-5"   # 1:30 PM ET
+    - cron: "30 18 * * 1-5"   # 2:30 PM ET
+    - cron: "0 19 * * 1-5"    # 3:00 PM ET
+    
+    # Power hour: 3:30 PM ET - last chance to act before close
+    - cron: "30 19 * * 1-5"   # 3:30 PM ET
+    
   workflow_dispatch:
+
 jobs:
   intraday-check:
     runs-on: ubuntu-latest
@@ -24,5 +42,5 @@ jobs:
           git config user.email "bot@market-risk"
           git pull --rebase || true
           git add intraday_state.json || true
-          git commit -m "Intraday check" || echo "No changes"
+          git commit -m "Intraday check $(date -u +%H:%M)" || echo "No changes"
           git push || echo "Push failed, state not saved"
