@@ -22,7 +22,11 @@ from risk_indicators import (
     credit_spread_score,
     breadth_score,
     dollar_strength_score,
-    yield_curve_score
+    yield_curve_score,
+    debt_ceiling_stress_score,
+    treasury_stress_score,
+    budget_vote_risk_score,
+    days_to_debt_ceiling
 )
 
 EMAIL_FROM = "tshprung@gmail.com"
@@ -37,6 +41,12 @@ OUTPUT_FILE = "risk_dashboard.png"
 
 GREEN, RED = 0.33, 0.66
 
+def safe_float(value):
+    """Convert to float and handle None/NaN"""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return 0.0
+    return float(value)
+
 # -----------------------------
 # Compute all scores
 # -----------------------------
@@ -45,24 +55,25 @@ btc_prices = get_close_series("BTC-USD")
 cross_score, gold_z, btc_z = gold_crypto_confirmation(gold_prices, btc_prices)
 
 scores = {
-    "Volatility expansion": volatility_expansion_score(),
-    "Options hedging stress": options_hedging_score(),
-    "Credit stress": credit_stress_score(),
-    "Cross-asset confirmation": max(cross_score, 0.0),
-    "Volatility compression": volatility_compression_score(),
-    "Credit complacency": credit_complacency_score(),
-    "Breadth divergence": breadth_divergence_score(),
-    "Put/Call ratio": put_call_ratio_score(),
-    "Credit spread (HY-IG)": credit_spread_score(),
-    "Market breadth": breadth_score(),
-    "Dollar strength": dollar_strength_score(),
-    "Yield curve inversion": yield_curve_score()
+    "Volatility expansion": safe_float(volatility_expansion_score()),
+    "Options hedging stress": safe_float(options_hedging_score()),
+    "Credit stress": safe_float(credit_stress_score()),
+    "Cross-asset confirmation": max(safe_float(cross_score), 0.0),
+    "Volatility compression": safe_float(volatility_compression_score()),
+    "Credit complacency": safe_float(credit_complacency_score()),
+    "Breadth divergence": safe_float(breadth_divergence_score()),
+    "Put/Call ratio": safe_float(put_call_ratio_score()),
+    "Credit spread (HY-IG)": safe_float(credit_spread_score()),
+    "Market breadth": safe_float(breadth_score()),
+    "Dollar strength": safe_float(dollar_strength_score()),
+    "Yield curve inversion": safe_float(yield_curve_score()),
+    "Debt ceiling stress": safe_float(debt_ceiling_stress_score()),
+    "Treasury volatility": safe_float(treasury_stress_score()),
+    "Budget vote risk": safe_float(budget_vote_risk_score())
 }
 
-# Ensure numeric values
-for k in scores:
-    if scores[k] is None or not isinstance(scores[k], (int, float)):
-        scores[k] = 0.0
+# Get debt ceiling info
+days_to_x, is_near_deadline = days_to_debt_ceiling()
 
 # Check circuit breakers
 drawdown_alert = check_drawdown()
@@ -82,6 +93,10 @@ yellow_count = int(sum(GREEN <= float(r) < RED for r in risk_levels))
 if drawdown_alert:
     red_count += 1
 
+# Add debt ceiling alert if critical
+if is_near_deadline and days_to_x <= 14:
+    red_count += 1
+
 # -----------------------------
 # Forced selling probability
 # -----------------------------
@@ -92,10 +107,6 @@ forced_selling = min(
     1.0
 )
 
-# Handle NaN
-if np.isnan(forced_selling):
-    forced_selling = 0.0
-
 forced_pct = int(forced_selling * 100)
 
 # -----------------------------
@@ -103,6 +114,8 @@ forced_pct = int(forced_selling * 100)
 # -----------------------------
 if drawdown_alert:
     guidance, cash, emoji, risk_level = "DRAWDOWN ALERT - Consider defensive action.", 80, "🚨", "CRISIS"
+elif is_near_deadline and days_to_x <= 14:
+    guidance, cash, emoji, risk_level = f"DEBT CEILING in {days_to_x} days - High uncertainty.", 70, "⚠️", "CRITICAL"
 elif red_count < 1:
     guidance, cash, emoji, risk_level = "Normal conditions.", 10, "🟢", "LOW"
 elif red_count < 2:
@@ -116,6 +129,10 @@ else:
 if recovery_signal and not drawdown_alert:
     guidance = "Recovery signals detected. " + guidance
     emoji = "🔄 " + emoji
+
+# Debt ceiling warning
+if is_near_deadline and days_to_x <= 60:
+    guidance = f"[Debt ceiling in {days_to_x} days] " + guidance
 
 # -----------------------------
 # Track changes vs yesterday
@@ -152,16 +169,19 @@ else:
 # Save today's state
 with open(STATE_FILE, "w") as f:
     json.dump({
-    "red": int(red_count), 
-    "yellow": int(yellow_count), 
-    "drawdown": bool(drawdown_alert),
-    "scores": {k: float(v) for k, v in scores.items()}}, f)
+        "red": int(red_count), 
+        "yellow": int(yellow_count), 
+        "drawdown": bool(drawdown_alert),
+        "debt_ceiling_days": int(days_to_x),
+        "scores": {k: float(v) for k, v in scores.items()}
+    }, f)
+
 # -----------------------------
 # Colors & plot
 # -----------------------------
 colors = ["green" if r < GREEN else "gold" if r < RED else "red" for r in risk_levels]
 
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(10, 6))
 ax.barh(indicators, risk_levels, color=colors)
 ax.axvline(GREEN, linestyle="--", alpha=0.3, color="gray")
 ax.axvline(RED, linestyle="--", alpha=0.3, color="gray")
@@ -169,11 +189,19 @@ ax.set_xlim(0, 1)
 ax.set_title("Daily Market Risk Dashboard", fontsize=14, fontweight="bold")
 ax.set_xlabel("Risk Score (0 = safe, 1 = extreme)")
 
-# Add warning banner if drawdown
+# Add warning banners
+banner_y = 0.95
+
 if drawdown_alert:
-    fig.text(0.5, 0.95, "⚠️ DRAWDOWN CIRCUIT BREAKER ACTIVE ⚠️", 
+    fig.text(0.5, banner_y, "⚠️ DRAWDOWN CIRCUIT BREAKER ACTIVE ⚠️", 
              ha='center', fontsize=12, color='red', fontweight='bold',
              bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.8))
+    banner_y -= 0.05
+
+if is_near_deadline and days_to_x <= 14:
+    fig.text(0.5, banner_y, f"⚠️ DEBT CEILING DEADLINE IN {days_to_x} DAYS ⚠️", 
+             ha='center', fontsize=11, color='darkred', fontweight='bold',
+             bbox=dict(boxstyle='round', facecolor='orange', alpha=0.8))
 
 plt.tight_layout()
 plt.savefig(OUTPUT_FILE, dpi=150)
@@ -198,6 +226,8 @@ if trade_signal == "SELL":
     subject_prefix = "🚨 SELL SIGNAL"
 elif trade_signal == "REBUY":
     subject_prefix = "✅ REBUY SIGNAL"
+elif is_near_deadline and days_to_x <= 14:
+    subject_prefix = f"⚠️ DEBT CEILING {days_to_x}d"
 elif drawdown_alert:
     subject_prefix = "⚠️ DRAWDOWN"
 else:
@@ -213,6 +243,23 @@ html = f"""
 <p><b>Suggested cash allocation:</b> {cash}%</p>
 <p><b>Forced selling probability:</b> {forced_pct}%</p>
 <p><b>Status change:</b> {change}</p>
+"""
+
+# Debt ceiling warning
+if is_near_deadline:
+    html += f"""
+<div style="background-color: {'#ffcccc' if days_to_x <= 14 else '#fff3cd'}; 
+     padding: 15px; border-left: 5px solid {'red' if days_to_x <= 14 else 'orange'}; 
+     margin: 10px 0;">
+<h3 style="margin: 0 0 10px 0;">⚠️ Debt Ceiling Alert</h3>
+<p style="margin: 5px 0;"><b>Days to X-date:</b> {days_to_x}</p>
+<p style="margin: 5px 0;"><b>Budget risk score:</b> {scores['Budget vote risk']:.2f}</p>
+<p style="margin: 5px 0;"><b>Treasury stress:</b> {scores['Treasury volatility']:.2f}</p>
+<p style="margin: 5px 0; font-size: 0.9em;">Historical pattern: Market typically ignores until 2 weeks before deadline, then sharp volatility spike (2011: -17% drop)</p>
+</div>
+"""
+
+html += f"""
 <hr>
 <div style="background-color: {'#ffcccc' if trade_signal == 'SELL' else '#ccffcc' if trade_signal == 'REBUY' else '#f0f0f0'}; 
      padding: 15px; border-left: 5px solid {'red' if trade_signal == 'SELL' else 'green' if trade_signal == 'REBUY' else 'gray'}; 
@@ -228,7 +275,7 @@ actions = {
     "LOW": "• Maintain normal allocation\n• Consider adding to positions on dips",
     "ELEVATED": "• Trim high-beta positions\n• Raise stop-losses\n• Monitor closely",
     "HIGH": "• Reduce exposure to 40-60% cash\n• Avoid new positions\n• Protect gains",
-    "CRITICAL": "• Move to 85%+ cash\n• Hedge remaining positions\n• Wait for clarity",
+    "CRITICAL": "• Move to 85%+ cash\n• Hedge remaining positions\n• Wait for clarity\n• Watch debt ceiling closely",
     "CRISIS": "• Maximum defensive posture\n• Preserve capital above all\n• Do not fight the tape"
 }
 
@@ -262,20 +309,13 @@ Gold Z-score: {gold_z:.2f}<br>
 BTC Z-score: {btc_z:.2f}<br>
 Cross-asset confirmation: {cross_score:.2f}
 </p>
-<p><b>Component scores:</b><br>
-"""
-
-for indicator, score in scores.items():
-    html += f"{indicator}: {score:.2f}<br>"
-
-html += f"""
-<hr>
 <p><b>Component scores (with trends):</b><br>
 """
 
 for indicator, score in scores.items():
     trend = score_changes.get(indicator, "→")
-    html += f"{indicator}: {score:.2f} {trend}<br>"
+    color = "red" if score >= RED else "orange" if score >= GREEN else "green"
+    html += f'<span style="color: {color};">{indicator}: {score:.2f} {trend}</span><br>'
 
 html += """
 </p>
@@ -296,3 +336,5 @@ with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
     s.send_message(msg)
 
 print(f"Dashboard sent: {trade_signal} | Cash {cash}% | Composite {composite_pct}%")
+if is_near_deadline:
+    print(f"Debt ceiling: {days_to_x} days to X-date")
