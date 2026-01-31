@@ -23,7 +23,9 @@ from risk_indicators import (
     earnings_volatility_score,
     is_earnings_season,
     congressional_budget_risk_score,
-    get_budget_risk_details
+    get_budget_risk_details,
+    news_sentiment_score,
+    get_news_risk_details
 )
 import yfinance as yf
 import json
@@ -88,29 +90,31 @@ treasury_stress   = safe_float(treasury_stress_score())
 budget_risk       = safe_float(budget_vote_risk_score())
 congressional_risk = safe_float(congressional_budget_risk_score())
 
-# --- NEW: Earnings Risk ---
-earnings_risk = safe_float(earnings_volatility_score())
-is_earnings, earnings_intensity, earnings_desc = is_earnings_season()
+# --- NEW: News Risk ---
+news_risk, news_severity, news_events, news_reasoning, used_ai = news_sentiment_score()
+news_risk = safe_float(news_risk)
 
 # --- Get context ---
 days_to_x, is_near_deadline = days_to_debt_ceiling()
 budget_details = get_budget_risk_details()
+news_details = get_news_risk_details()
 
 # ======================
 # REWEIGHTED COMPOSITE
 # ======================
 
-# Base weights (total: 100%)
+# Base weights (total: 95% + 5% news)
 base_composite = (
-    0.15 * vol_score +         
-    0.15 * credit_score +      
-    0.15 * options_score +     
+    0.14 * vol_score +         # Reduced from 15%
+    0.14 * credit_score +      # Reduced from 15%
+    0.14 * options_score +     # Reduced from 15%
     0.10 * spike_score +       
     0.12 * put_call_score +    
     0.10 * spread_score +      
-    0.10 * breadth_sc +        
+    0.09 * breadth_sc +        # Reduced from 10%
     0.05 * dollar_score +      
-    0.08 * curve_score         
+    0.07 * curve_score +       # Reduced from 8%
+    0.05 * news_risk           # NEW: 5% weight for news
 )
 
 # ======================
@@ -165,8 +169,17 @@ persistent_high_risk = get_persistent_risk(recent_scores, SELL_THRESHOLD, PERSIS
 debt_ceiling_emergency = is_near_deadline and days_to_x <= 14 and budget_risk > 0.6
 congressional_emergency = congressional_risk > 0.7  # Shutdown imminent
 earnings_crash = is_earnings and earnings_risk > 0.75 and composite > 0.60
+news_crisis = news_risk > 0.80  # NEW: Critical news event
 
-if debt_ceiling_emergency:
+if news_crisis:
+    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+        signal = "SELL"
+        reason = f"CRISIS NEWS: {news_severity} - {', '.join(news_events[:2]) if news_events else news_reasoning}"
+    else:
+        signal = "HOLD (sell cooldown)"
+        reason = f"News crisis but in cooldown - {news_severity}"
+
+elif debt_ceiling_emergency:
     if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"Debt ceiling deadline in {days_to_x} days, Treasury stress elevated"
@@ -232,6 +245,8 @@ else:
         context_parts.append("budget issues")
     if is_earnings:
         context_parts.append(earnings_desc)
+    if news_risk > 0.3:
+        context_parts.append(f"news: {news_severity}")
     
     context_str = ", ".join(context_parts) if context_parts else "monitoring"
     reason = f"Composite {composite_pct}% - {context_str}"
@@ -263,15 +278,21 @@ state.update({
     "budget_risk": round(budget_risk, 2),
     "congressional_risk": round(congressional_risk, 2),
     "earnings_risk": round(earnings_risk, 2),
+    "news_risk": round(news_risk, 2),
+    "news_severity": news_severity,
+    "news_events": news_events[:3] if news_events else [],
+    "used_ai": used_ai,
     "accel_score": round(accel_score, 2),
     "drawdown_alert": bool(drawdown_alert),
     "vix_spike_alert": bool(vix_spike_alert),
     "debt_ceiling_alert": bool(debt_ceiling_emergency),
     "congressional_alert": bool(congressional_emergency),
     "earnings_alert": bool(is_earnings),
+    "news_crisis_alert": bool(news_crisis),
     "days_to_debt_ceiling": int(days_to_x),
     "budget_details": budget_details,
-    "earnings_details": earnings_desc if is_earnings else "No earnings"
+    "earnings_details": earnings_desc if is_earnings else "No earnings",
+    "news_details": news_details
 })
 
 with open(STATE_FILE, "w") as f:
@@ -294,10 +315,14 @@ if congressional_risk > 0.4:
 if is_earnings:
     print(f"📊 EARNINGS: {earnings_desc} | Risk: {earnings_risk:.2f}")
 
+if news_risk > 0.3:
+    ai_tag = "[AI]" if used_ai else "[KW]"
+    print(f"📰 NEWS {ai_tag}: {news_severity} ({int(news_risk*100)}%) | {', '.join(news_events[:2]) if news_events else news_reasoning[:50]}")
+
 print(f"Core: Vol={vol_score:.2f} Credit={credit_score:.2f} Options={options_score:.2f} Spike={spike_score:.2f}")
 print(f"Market: PutCall={put_call_score:.2f} Spread={spread_score:.2f} Breadth={breadth_sc:.2f}")
 print(f"Macro: Dollar={dollar_score:.2f} Curve={curve_score:.2f}")
 print(f"Fiscal: DebtStress={debt_stress:.2f} TreasuryStress={treasury_stress:.2f} Congressional={congressional_risk:.2f}")
-print(f"Events: Earnings={earnings_risk:.2f}")
+print(f"Events: Earnings={earnings_risk:.2f} News={news_risk:.2f}")
 print(f"Cross-asset: Gold Z={gold_z:.2f} BTC Z={btc_z:.2f}")
 print(f"Acceleration: {accel_score:.2f}")
