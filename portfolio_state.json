@@ -1,23 +1,23 @@
 {
-  "timestamp": "2026-02-02T14:38:01.459217",
+  "timestamp": "2026-02-03T14:40:44.681437",
   "results": [
     {
       "symbol": "TTD",
-      "current_price": 30.84000015258789,
+      "current_price": 28.24690055847168,
       "cost_basis": 50.17198924731183,
       "shares": 1860.0,
-      "gain_pct": -38.53143832793061,
-      "total_gain": -35957.49971618652,
-      "current_value": 57362.40028381348,
+      "gain_pct": -43.69985925964631,
+      "total_gain": -40780.66496124267,
+      "current_value": 52539.235038757324,
       "signal_type": "HOLD",
       "signals": [
-        "\ud83d\udc80 DOWN 75% from peak",
-        "\ud83d\udcca REVERSION POTENTIAL: +141%"
+        "\ud83d\udc80 DOWN 77% from peak",
+        "\ud83d\udcca REVERSION POTENTIAL: +163%"
       ],
       "actions": [
         "\u26a0\ufe0f Verify company survival - extreme drop",
-        "\ud83d\udca1 Stock down 75% from stable $74.41 area",
-        "\ud83d\udcb0 Currently down 38.5% - good averaging zone"
+        "\ud83d\udca1 Stock down 77% from stable $74.41 area",
+        "\ud83d\udcb0 Currently down 43.7% - good averaging zone"
       ],
       "health": {
         "risk_score": 0,
@@ -25,26 +25,26 @@
         "cash": 1445447040,
         "debt": 375976992,
         "revenue": 2790504960,
-        "market_cap": 15078998016
+        "market_cap": 13816547328
       },
       "peak_price": 122.54000091552734,
       "peak_date": "Ticker\nTTD   2025-02-10\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -74.83270775079612,
-      "reversion_target": 74.41000366210938,
-      "reversion_potential": 141.27757228906944,
-      "drop_1d": 1.6815042207870778,
-      "drop_1w": -4.193844460126694,
-      "drop_1m": -18.152866499972763,
-      "volume_ratio": 0.0591378200580937
+      "drawdown_from_peak": -76.94883275058598,
+      "reversion_target": 74.40800323486329,
+      "reversion_potential": 163.42006295818953,
+      "drop_1d": -5.052435097574182,
+      "drop_1w": -11.36837209085203,
+      "drop_1m": -29.57641453841878,
+      "volume_ratio": 0.27015887188006066
     },
     {
       "symbol": "RGTI",
-      "current_price": 18.040000915527344,
+      "current_price": 17.739999771118164,
       "cost_basis": 29.891256468640037,
       "shares": 966.2,
-      "gain_pct": -39.647900266575476,
-      "total_gain": -11450.683115417483,
-      "current_value": 17430.24888458252,
+      "gain_pct": -40.65154206639049,
+      "total_gain": -11740.544221145632,
+      "current_value": 17140.387778854372,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -56,26 +56,26 @@
         "cash": 446983008,
         "debt": 7597000,
         "revenue": 7494000,
-        "market_cap": 5952020480
+        "market_cap": 5854662656
       },
       "peak_price": 56.34000015258789,
       "peak_date": "Ticker\nRGTI   2025-10-15\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -67.98011915749223,
-      "reversion_target": 25.719999313354492,
-      "reversion_potential": 42.57205104250765,
-      "drop_1d": -0.7154604304939416,
-      "drop_1w": -19.139393333170894,
-      "drop_1m": -23.559319390130128,
-      "volume_ratio": 0.08819161831367285
+      "drawdown_from_peak": -68.51260255045757,
+      "reversion_target": 25.717999267578126,
+      "reversion_potential": 44.971812848885406,
+      "drop_1d": 0.16939970748959254,
+      "drop_1w": -19.40027448141739,
+      "drop_1m": -29.06837421523968,
+      "volume_ratio": 0.07849982992132702
     },
     {
       "symbol": "ABSI",
-      "current_price": 2.9900999069213867,
+      "current_price": 3.1401000022888184,
       "cost_basis": 3.77,
       "shares": 700.0,
-      "gain_pct": -20.68700512144863,
-      "total_gain": -545.9300651550293,
-      "current_value": 2093.0699348449707,
+      "gain_pct": -16.708222750959724,
+      "total_gain": -440.92999839782715,
+      "current_value": 2198.070001602173,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -87,26 +87,26 @@
         "cash": 152475008,
         "debt": 6220000,
         "revenue": 2815000,
-        "market_cap": 449625920
+        "market_cap": 475174080
       },
       "peak_price": 5.820000171661377,
       "peak_date": "Ticker\nABSI   2025-02-14\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -48.623714454842826,
-      "reversion_target": 3.630000114440918,
-      "reversion_potential": 21.400629659173287,
-      "drop_1d": 0.003341049642968663,
-      "drop_1w": 0.33892240883408586,
-      "drop_1m": -17.17174532377608,
-      "volume_ratio": 0.06967598291652327
+      "drawdown_from_peak": -46.04639330461659,
+      "reversion_target": 3.6260000705718998,
+      "reversion_potential": 15.474031652778852,
+      "drop_1d": 3.9768219245305714,
+      "drop_1w": 6.80612044809068,
+      "drop_1m": -16.040107104765266,
+      "volume_ratio": 0.07095378332571411
     },
     {
       "symbol": "JD",
-      "current_price": 28.420000076293945,
+      "current_price": 28.06999969482422,
       "cost_basis": 31.07965517241379,
       "shares": 870.0,
-      "gain_pct": -8.557543773782106,
-      "total_gain": -2313.899933624267,
-      "current_value": 24725.400066375732,
+      "gain_pct": -9.683683621628248,
+      "total_gain": -2618.400265502929,
+      "current_value": 24420.89973449707,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -118,32 +118,32 @@
         "cash": 198271991808,
         "debt": 112088997888,
         "revenue": 1303786946560,
-        "market_cap": 41923665920
+        "market_cap": 41399894016
       },
       "peak_price": 43.91532516479492,
       "peak_date": "Ticker\nJD   2025-03-17\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -35.284550507946435,
-      "reversion_target": 35.90999984741211,
-      "reversion_potential": 26.354678926851307,
-      "drop_1d": -0.2106722854872345,
-      "drop_1w": -3.6610166905289954,
-      "drop_1m": -3.758891244636997,
-      "volume_ratio": 0.12516074227935545
+      "drawdown_from_peak": -36.08153966869233,
+      "reversion_target": 35.87917556762695,
+      "reversion_potential": 27.820363226589762,
+      "drop_1d": -1.6123413275507148,
+      "drop_1w": -3.968525027637959,
+      "drop_1m": -5.328836236202195,
+      "volume_ratio": 0.13091231791145955
     },
     {
       "symbol": "LI",
-      "current_price": 16.65250015258789,
+      "current_price": 16.665000915527344,
       "cost_basis": 17.15,
       "shares": 800.0,
-      "gain_pct": -2.900873745843191,
-      "total_gain": -397.9998779296857,
-      "current_value": 13322.000122070312,
+      "gain_pct": -2.8279829998405503,
+      "total_gain": -387.9992675781232,
+      "current_value": 13332.000732421875,
       "signal_type": "HOLD",
       "signals": [
         "\ud83d\udcca REVERSION POTENTIAL: +66%"
       ],
       "actions": [
-        "\ud83d\udca1 Stock down 49% from stable $27.66 area"
+        "\ud83d\udca1 Stock down 49% from stable $27.65 area"
       ],
       "health": {
         "risk_score": 0,
@@ -151,26 +151,26 @@
         "cash": 98677981184,
         "debt": 17891788800,
         "revenue": 127810764800,
-        "market_cap": 16873716736
+        "market_cap": 16886383616
       },
       "peak_price": 32.915000915527344,
       "peak_date": "Ticker\nLI   2025-02-26\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -49.407565883638696,
-      "reversion_target": 27.65999984741211,
-      "reversion_potential": 66.10118356980523,
-      "drop_1d": 0.13530362571738674,
-      "drop_1w": -0.5820886412663206,
-      "drop_1m": -3.4637672313745482,
-      "volume_ratio": 0.08528497361340216
+      "drawdown_from_peak": -49.36958696037652,
+      "reversion_target": 27.65200004577637,
+      "reversion_potential": 65.92858401833071,
+      "drop_1d": 0.7557436099211667,
+      "drop_1w": -2.827980838430444,
+      "drop_1m": -4.003454322517697,
+      "volume_ratio": 0.05458698510661926
     },
     {
       "symbol": "KMB",
-      "current_price": 100.0999984741211,
+      "current_price": 99.76000213623047,
       "cost_basis": 97.77559585492229,
       "shares": 386.0,
-      "gain_pct": 2.3772830008090384,
-      "total_gain": 897.2194110107375,
-      "current_value": 38638.59941101074,
+      "gain_pct": 2.029551713755451,
+      "total_gain": 765.9808245849563,
+      "current_value": 38507.36082458496,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -184,26 +184,26 @@
         "cash": 688000000,
         "debt": 7190000128,
         "revenue": 16446999552,
-        "market_cap": 33222500352
+        "market_cap": 33109657600
       },
-      "peak_price": 142.8666534423828,
+      "peak_price": 142.86663818359375,
       "peak_date": "Ticker\nKMB   2025-03-10\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -29.934665604461173,
-      "reversion_target": 133.6685333251953,
-      "reversion_potential": 33.5350003624153,
-      "drop_1d": 0.11001161386305913,
-      "drop_1w": -0.5365668907017951,
-      "drop_1m": -1.2820542723818718,
-      "volume_ratio": 0.03219459188917505
+      "drawdown_from_peak": -30.1726397397048,
+      "reversion_target": 133.65107421875,
+      "reversion_potential": 33.972605610250994,
+      "drop_1d": 0.2613086796286135,
+      "drop_1w": 0.22101790102435626,
+      "drop_1m": 1.723261391521591,
+      "volume_ratio": 0.02096220260756968
     },
     {
       "symbol": "CE",
-      "current_price": 44.73500061035156,
+      "current_price": 46.75,
       "cost_basis": 41.8,
       "shares": 300.0,
-      "gain_pct": 7.021532560649679,
-      "total_gain": 880.5001831054688,
-      "current_value": 13420.500183105469,
+      "gain_pct": 11.842105263157897,
+      "total_gain": 1485.0,
+      "current_value": 14025.0,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -217,26 +217,26 @@
         "cash": 1440000000,
         "debt": 13203999744,
         "revenue": 9710000128,
-        "market_cap": 4898701824
+        "market_cap": 5119353856
       },
-      "peak_price": 71.19470977783203,
+      "peak_price": 71.19471740722656,
       "peak_date": "Ticker\nCE   2025-02-04\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -37.165274288005115,
-      "reversion_target": 56.172401428222656,
-      "reversion_potential": 25.56700717966349,
-      "drop_1d": 0.6638208657938183,
-      "drop_1w": -4.534784405296355,
-      "drop_1m": 6.107686841221649,
-      "volume_ratio": 0.01836363658049129
+      "drawdown_from_peak": -34.335015711074824,
+      "reversion_target": 56.128454589843756,
+      "reversion_potential": 20.06086543282086,
+      "drop_1d": 1.9184676010610024,
+      "drop_1w": 1.2562310029390567,
+      "drop_1m": 9.793325480564041,
+      "volume_ratio": 0.01235922844533933
     },
     {
       "symbol": "ATGE",
-      "current_price": 103.47000122070312,
+      "current_price": 102.92500305175781,
       "cost_basis": 95.0,
       "shares": 90.0,
-      "gain_pct": 8.915790758634866,
-      "total_gain": 762.3001098632812,
-      "current_value": 9312.300109863281,
+      "gain_pct": 8.342108475534538,
+      "total_gain": 713.2502746582031,
+      "current_value": 9263.250274658203,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -250,32 +250,32 @@
         "cash": 56281000,
         "debt": 729552000,
         "revenue": 1888834048,
-        "market_cap": 3758914816
+        "market_cap": 3739116032
       },
       "peak_price": 154.4499969482422,
       "peak_date": "Ticker\nATGE   2025-09-30\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -33.00744366127958,
-      "reversion_target": 133.13999938964844,
-      "reversion_potential": 28.674976146621223,
-      "drop_1d": -0.07725912959626324,
-      "drop_1w": -10.197882204056707,
-      "drop_1m": -0.9572125857330138,
-      "volume_ratio": 0.02750660204217069
+      "drawdown_from_peak": -33.36030748757537,
+      "reversion_target": 133.08999938964843,
+      "reversion_potential": 29.30774393343625,
+      "drop_1d": -2.606923964290564,
+      "drop_1w": -11.210313425167762,
+      "drop_1m": -6.073187322589424,
+      "volume_ratio": 0.018220440041588255
     },
     {
       "symbol": "MOH",
-      "current_price": 180.88999938964844,
+      "current_price": 183.4499969482422,
       "cost_basis": 149.5779487179487,
       "shares": 78.0,
-      "gain_pct": 20.933600801508014,
-      "total_gain": 2442.33995239258,
-      "current_value": 14109.419952392578,
+      "gain_pct": 22.645081391084098,
+      "total_gain": 2642.0197619628925,
+      "current_value": 14309.09976196289,
       "signal_type": "HOLD",
       "signals": [
-        "\ud83d\udcca REVERSION POTENTIAL: +72%"
+        "\ud83d\udcca REVERSION POTENTIAL: +70%"
       ],
       "actions": [
-        "\ud83d\udca1 Stock down 49% from stable $311.89 area"
+        "\ud83d\udca1 Stock down 48% from stable $311.84 area"
       ],
       "health": {
         "risk_score": 0,
@@ -283,26 +283,26 @@
         "cash": 8447000064,
         "debt": 3852000000,
         "revenue": 42842001408,
-        "market_cap": 9804237824
+        "market_cap": 9942989824
       },
       "peak_price": 353.239990234375,
       "peak_date": "Ticker\nMOH   2025-04-03\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -48.7911888827684,
-      "reversion_target": 311.8900146484375,
-      "reversion_potential": 72.41971126143176,
-      "drop_1d": 0.7238727536426515,
-      "drop_1w": -1.7542884060382735,
-      "drop_1m": 1.3616455140435857,
-      "volume_ratio": 0.02112149477027023
+      "drawdown_from_peak": -48.06646981659042,
+      "reversion_target": 311.8360107421875,
+      "reversion_potential": 69.98420056129389,
+      "drop_1d": 1.252900079603747,
+      "drop_1w": -1.8983973538811871,
+      "drop_1m": 0.3555765238692832,
+      "volume_ratio": 0.01552244280800731
     },
     {
       "symbol": "PAGS",
-      "current_price": 11.484999656677246,
+      "current_price": 11.800000190734863,
       "cost_basis": 8.92,
       "shares": 1500.0,
-      "gain_pct": 28.755601532256115,
-      "total_gain": 3847.499485015869,
-      "current_value": 17227.49948501587,
+      "gain_pct": 32.28699765397829,
+      "total_gain": 4320.000286102295,
+      "current_value": 17700.000286102295,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -314,26 +314,26 @@
         "cash": 1886377984,
         "debt": 2629190912,
         "revenue": 19520651264,
-        "market_cap": 3352144640
+        "market_cap": 3444084480
       },
       "peak_price": 12.0,
       "peak_date": "Ticker\nPAGS   2026-01-29\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -4.291669527689612,
-      "reversion_target": 9.770000457763672,
-      "reversion_potential": -14.932514150459674,
-      "drop_1d": 2.0888858371310715,
-      "drop_1w": -2.916316730801194,
-      "drop_1m": 18.769385378111636,
-      "volume_ratio": 0.014856940188211798
+      "drawdown_from_peak": -1.6666650772094727,
+      "reversion_target": 9.794000244140625,
+      "reversion_potential": -16.999999272621302,
+      "drop_1d": 3.1468585975201524,
+      "drop_1w": -1.42021781538475,
+      "drop_1m": 16.485686647853637,
+      "volume_ratio": 0.04670401515210551
     },
     {
       "symbol": "ENPH",
-      "current_price": 36.5,
+      "current_price": 36.95000076293945,
       "cost_basis": 29.8,
       "shares": 300.0,
-      "gain_pct": 22.483221476510074,
-      "total_gain": 2010.0,
-      "current_value": 10950.0,
+      "gain_pct": 23.99329115080353,
+      "total_gain": 2145.000228881836,
+      "current_value": 11085.000228881836,
       "signal_type": "\u2705 STABLE",
       "signals": [
         "No urgent issues"
@@ -345,17 +345,17 @@
         "cash": 1477923968,
         "debt": 1233623040,
         "revenue": 1512376960,
-        "market_cap": 4776379392
+        "market_cap": 4835266560
       },
       "peak_price": 66.51000213623047,
       "peak_date": "Ticker\nENPH   2025-02-06\ndtype: datetime64[ns]",
-      "drawdown_from_peak": -45.121036193566596,
-      "reversion_target": 51.88999938964844,
-      "reversion_potential": 42.164381889447775,
-      "drop_1d": -1.2979976965335038,
-      "drop_1w": -8.590033255600005,
-      "drop_1m": 8.148148148148149,
-      "volume_ratio": 0.06043961887043605
+      "drawdown_from_peak": -44.444445081724915,
+      "reversion_target": 51.86199951171875,
+      "reversion_potential": 40.35723529330995,
+      "drop_1d": 1.3161489612559807,
+      "drop_1w": -8.697801708893838,
+      "drop_1m": 8.676472832174852,
+      "volume_ratio": 0.05093406099521847
     }
   ]
 }
