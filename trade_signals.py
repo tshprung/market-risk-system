@@ -32,13 +32,24 @@ import json
 from datetime import datetime, timedelta, timezone
 
 STATE_FILE = "trade_signal_state.json"
-SELL_COOLDOWN_DAYS = 5
-BUY_COOLDOWN_DAYS = 3
 
-# UPDATED: Lower thresholds for more sensitivity
-SELL_THRESHOLD = 0.50  # Lowered from 0.55
-REBUY_THRESHOLD = 0.4
+# ======================
+# FIX #1: SHORTER COOLDOWN
+# ======================
+SELL_COOLDOWN_DAYS = 2  # CHANGED from 5 → allows faster re-entry
+BUY_COOLDOWN_DAYS = 2   # CHANGED from 3 → consistency
+
+# ======================
+# FIX #2: LOWER THRESHOLD
+# ======================
+SELL_THRESHOLD = 0.45  # CHANGED from 0.50 → more sensitive
+REBUY_THRESHOLD = 0.40  # Keep same
 PERSISTENCE_DAYS = 2
+
+# ======================
+# FIX #3: EMERGENCY OVERRIDE
+# ======================
+CRITICAL_OVERRIDE_THRESHOLD = 0.65  # NEW: Ignore cooldown above this
 
 # --- Load State ---
 if not os.path.exists(STATE_FILE):
@@ -145,15 +156,25 @@ if is_earnings and earnings_risk > 0.3:
 # Apply event boosts (cap total composite at 1.0)
 base_composite = min(base_composite + event_boost, 1.0)
 
-# Track history
-recent_scores.append(base_composite)
+# ======================
+# FIX #3: SMOOTHING
+# ======================
+
+# Smooth composite to prevent whipsaws (70% current, 30% previous)
+if recent_scores:
+    smoothed_composite = 0.7 * base_composite + 0.3 * recent_scores[-1]
+else:
+    smoothed_composite = base_composite
+
+# Track history (use smoothed for persistence)
+recent_scores.append(smoothed_composite)
 recent_scores = recent_scores[-20:]
 
 # Acceleration
 accel_score = safe_float(risk_acceleration_score(recent_scores))
 
 # Final composite with acceleration boost
-composite = min(max(base_composite + 0.15 * accel_score, 0.0), 1.0)
+composite = min(max(smoothed_composite + 0.15 * accel_score, 0.0), 1.0)
 
 composite_pct = int(composite * 100)
 
@@ -163,6 +184,7 @@ composite_pct = int(composite * 100)
 
 signal = "HOLD"
 reason = ""
+cooldown_overridden = False
 
 # --- SELL CONDITIONS ---
 drawdown_alert = check_drawdown()  # NOW: -2% in 2 days OR -5% in 10 days
@@ -175,56 +197,88 @@ congressional_emergency = congressional_risk > 0.7  # Shutdown imminent
 earnings_crash = is_earnings and earnings_risk > 0.75 and composite > 0.60
 news_crisis = news_risk > 0.80  # NEW: Critical news event
 
+# ======================
+# FIX #1: EMERGENCY OVERRIDE
+# ======================
+
 if news_crisis:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    # CRITICAL news always overrides cooldown
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"CRISIS NEWS: {news_severity} - {', '.join(news_events[:2]) if news_events else news_reasoning}"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = f"News crisis but in cooldown - {news_severity}"
 
 elif debt_ceiling_emergency:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    # Debt ceiling emergency can override if critical
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"Debt ceiling deadline in {days_to_x} days, Treasury stress elevated"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = f"Debt ceiling risk but in cooldown ({days_to_x} days to X-date)"
 
 elif congressional_emergency:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"Congressional budget crisis - {budget_details}"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = f"Budget crisis but in cooldown"
 
 elif drawdown_alert:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = "Drawdown circuit breaker triggered (-2% in 2d or -5% in 10d)"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = "Drawdown detected but in cooldown"
 
 elif vix_spike_alert:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"VIX spike detected ({spike_score:.2f})"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = "VIX spike but in cooldown"
 
 elif earnings_crash:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    if composite > CRITICAL_OVERRIDE_THRESHOLD or not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"{earnings_desc} volatility spike - composite {composite_pct}%"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS) and composite > CRITICAL_OVERRIDE_THRESHOLD:
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
     else:
         signal = "HOLD (sell cooldown)"
         reason = f"Earnings volatility but in cooldown"
         
 elif composite > SELL_THRESHOLD and persistent_high_risk:
-    if not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+    # CRITICAL OVERRIDE: If composite >65%, sell even in cooldown
+    if composite > CRITICAL_OVERRIDE_THRESHOLD:
+        signal = "SELL"
+        reason = f"CRITICAL: Composite {composite_pct}% for {PERSISTENCE_DAYS}+ days"
+        if in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
+            cooldown_overridden = True
+            reason += " [EMERGENCY OVERRIDE]"
+            print(f"⚠️ EMERGENCY OVERRIDE: Cooldown bypassed - composite at {composite_pct}%")
+    elif not in_cooldown(state, "SELL", SELL_COOLDOWN_DAYS):
         signal = "SELL"
         reason = f"Composite {composite_pct}% for {PERSISTENCE_DAYS}+ days"
     else:
@@ -268,6 +322,8 @@ state.update({
     "reason": reason,
     "recent_scores": recent_scores,
     "composite_pct": composite_pct,
+    "base_composite_pct": int(base_composite * 100),  # NEW: Track unsmoothed
+    "smoothed_composite_pct": int(smoothed_composite * 100),  # NEW: Track smoothed
     "vol_score": round(vol_score, 2),
     "credit_score": round(credit_score, 2),
     "options_score": round(options_score, 2),
@@ -293,6 +349,7 @@ state.update({
     "congressional_alert": bool(congressional_emergency),
     "earnings_alert": bool(is_earnings),
     "news_crisis_alert": bool(news_crisis),
+    "cooldown_overridden": bool(cooldown_overridden),  # NEW: Track overrides
     "days_to_debt_ceiling": int(days_to_x),
     "budget_details": budget_details,
     "earnings_details": earnings_desc if is_earnings else "No earnings",
@@ -306,9 +363,12 @@ with open(STATE_FILE, "w") as f:
 # CONSOLE OUTPUT
 # ======================
 
-print(f"Composite: {composite_pct}/100 | Signal: {signal}")
+print(f"Composite: {composite_pct}/100 (Base: {int(base_composite*100)}%, Smoothed: {int(smoothed_composite*100)}%) | Signal: {signal}")
 print(f"Reason: {reason}")
 print(f"Drawdown Alert: {drawdown_alert} | VIX Spike: {vix_spike_alert}")
+
+if cooldown_overridden:
+    print(f"🚨 EMERGENCY OVERRIDE ACTIVATED - Cooldown bypassed due to CRITICAL risk level")
 
 if is_near_deadline:
     print(f"⚠️ DEBT CEILING: {days_to_x} days to X-date | Budget risk: {budget_risk:.2f}")
